@@ -5,7 +5,7 @@ export interface IAlbum extends Document {
   artist: string;
   coverImage: string;
   description?: string;
-  releaseYear: number;
+  releaseDate: Date;
   tracks: mongoose.Types.ObjectId[];
 }
 
@@ -29,11 +29,9 @@ const albumSchema = new Schema<IAlbum>(
       type: String,
       trim: true,
     },
-    releaseYear: {
-      type: Number,
-      required: [true, 'Release year is required'],
-      min: [1900, 'Release year must be after 1900'],
-      max: [new Date().getFullYear(), 'Release year cannot be in the future'],
+    releaseDate: {
+      type: Date,
+      default: Date.now,
     },
     tracks: [{
       type: Schema.Types.ObjectId,

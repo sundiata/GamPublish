@@ -6,7 +6,7 @@ import AppError from '../utils/appError';
 
 // Get all albums
 export const getAllAlbums = catchAsync(async (req: Request, res: Response) => {
-  const albums = await Album.find().populate('tracks').sort({ releaseYear: -1 });
+  const albums = await Album.find().populate('tracks').sort({ releaseDate: -1 });
   res.status(200).json({
     status: 'success',
     results: albums.length,
@@ -47,9 +47,11 @@ export const updateAlbum = catchAsync(async (req: Request, res: Response) => {
     new: true,
     runValidators: true,
   }).populate('tracks');
+  
   if (!album) {
     throw new AppError('No album found with that ID', 404);
   }
+  
   res.status(200).json({
     status: 'success',
     data: {
@@ -61,16 +63,19 @@ export const updateAlbum = catchAsync(async (req: Request, res: Response) => {
 // Delete album
 export const deleteAlbum = catchAsync(async (req: Request, res: Response) => {
   const album = await Album.findById(req.params.id);
+  
   if (!album) {
     throw new AppError('No album found with that ID', 404);
   }
 
-  // Delete all tracks associated with the album
-  await Track.deleteMany({ album: album._id });
-  
-  // Delete the album
-  await album.deleteOne();
+  // Remove album reference from all tracks
+  await Track.updateMany(
+    { album: album._id },
+    { $unset: { album: 1 } }
+  );
 
+  await album.deleteOne();
+  
   res.status(204).json({
     status: 'success',
     data: null,
@@ -81,12 +86,14 @@ export const deleteAlbum = catchAsync(async (req: Request, res: Response) => {
 export const addTrackToAlbum = catchAsync(async (req: Request, res: Response) => {
   const { albumId, trackId } = req.params;
   
-  const album = await Album.findById(albumId);
+  const [album, track] = await Promise.all([
+    Album.findById(albumId),
+    Track.findById(trackId),
+  ]);
+
   if (!album) {
     throw new AppError('No album found with that ID', 404);
   }
-
-  const track = await Track.findById(trackId);
   if (!track) {
     throw new AppError('No track found with that ID', 404);
   }
@@ -120,18 +127,14 @@ export const removeTrackFromAlbum = catchAsync(async (req: Request, res: Respons
     throw new AppError('No album found with that ID', 404);
   }
 
-  const track = await Track.findById(trackId);
-  if (!track) {
-    throw new AppError('No track found with that ID', 404);
-  }
-
   // Remove track from album
-  album.tracks = album.tracks.filter(id => id.toString() !== trackId);
+  album.tracks = album.tracks.filter(
+    (track) => track.toString() !== trackId
+  );
   await album.save();
 
   // Remove album reference from track
-  track.album = undefined;
-  await track.save();
+  await Track.findByIdAndUpdate(trackId, { $unset: { album: 1 } });
 
   const updatedAlbum = await Album.findById(albumId).populate('tracks');
   
