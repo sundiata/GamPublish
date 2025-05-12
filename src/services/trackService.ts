@@ -8,7 +8,8 @@ export interface Track {
   artist: string;
   coverImage: string;
   audioFile: string;
-  description?: string;
+  description: string;
+  album?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -18,7 +19,8 @@ export interface CreateTrackData {
   artist: string;
   coverImage: string;
   audioFile: string;
-  description?: string;
+  description: string;
+  album?: string;
 }
 
 export interface UpdateTrackData {
