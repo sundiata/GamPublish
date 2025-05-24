@@ -8,13 +8,16 @@ import authRoutes from './routes/authRoutes';
 import prayerRoutes from './routes/prayerRoutes';
 import trackRoutes from './routes/trackRoutes';
 import albumRoutes from './routes/albumRoutes';
+import eventRoutes from './routes/eventRoutes';
+import notificationRoutes from './routes/notificationRoutes';
+import prayerTimeRoutes from './routes/prayerTimeRoutes';
 
 dotenv.config();
 
 const app = express();
 
 // Create upload directories if they don't exist
-const uploadDirs = ['uploads/tracks', 'uploads/images'];
+const uploadDirs = ['uploads/tracks', 'uploads/images', 'uploads/events'];
 uploadDirs.forEach(dir => {
   const dirPath = path.join(__dirname, '..', dir);
   if (!fs.existsSync(dirPath)) {
@@ -40,8 +43,11 @@ app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/prayers', prayerRoutes);
+app.use('/api/prayers', prayerTimeRoutes);
 app.use('/api/tracks', trackRoutes);
 app.use('/api/albums', albumRoutes);
+app.use('/api/events', eventRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Test route
 app.get('/api/test', (req, res) => {
