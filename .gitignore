@@ -22,3 +22,4 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# sudo mongod --dbpath=/Users/macbookpro/data/db
