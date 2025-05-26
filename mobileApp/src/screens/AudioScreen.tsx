@@ -158,7 +158,11 @@ const AudioScreen = ({ navigation }) => {
 
       // Unload any existing sound
       if (sound) {
-        await sound.unloadAsync();
+        try {
+          await sound.unloadAsync();
+        } catch (error) {
+          console.log('Error unloading previous sound:', error);
+        }
         setSound(null);
       }
 
@@ -174,6 +178,22 @@ const AudioScreen = ({ navigation }) => {
               volume: 1.0,
               rate: 1.0,
               shouldCorrectPitch: true,
+            },
+            (status) => {
+              if (status.isLoaded) {
+                setIsBuffering(status.isBuffering);
+                setIsPlaying(status.isPlaying);
+                
+                if (status.didJustFinish) {
+                  setIsPlaying(false);
+                }
+              } else {
+                console.log('Audio not loaded in status update:', status);
+                if (!status.isLoaded && 'error' in status) {
+                  console.error('Playback error:', status.error);
+                  setPlaybackError(status.error);
+                }
+              }
             }
           );
 
@@ -189,23 +209,6 @@ const AudioScreen = ({ navigation }) => {
           });
           setIsModalVisible(true);
           setRetryCount(0);
-
-          // Add playback status listener with error handling
-          newSound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
-            if (status.isLoaded) {
-              const successStatus = status as AVPlaybackStatusSuccess;
-              setIsBuffering(successStatus.isBuffering);
-              setIsPlaying(successStatus.isPlaying);
-              
-              if (successStatus.didJustFinish) {
-                setIsPlaying(false);
-              }
-            } else {
-              console.error('Audio not loaded in status update:', status);
-              setPlaybackError('Playback error occurred');
-              setIsPlaying(false);
-            }
-          });
 
         } catch (error) {
           console.error(`Error loading sound (attempt ${retryAttempt + 1}):`, error);
@@ -237,7 +240,7 @@ const AudioScreen = ({ navigation }) => {
     }
   };
 
-  // Enhanced togglePlayback with error handling
+  // Enhanced togglePlayback with better error handling
   const togglePlayback = async () => {
     if (!sound) return;
 
@@ -252,7 +255,10 @@ const AudioScreen = ({ navigation }) => {
         }
         setIsPlaying(!isPlaying);
       } else {
-        throw new Error('Sound not loaded');
+        // If sound is not loaded, try to reload it
+        if (currentTrack) {
+          await playAudio(currentTrack);
+        }
       }
     } catch (error) {
       console.error('Error toggling playback:', error);
@@ -288,16 +294,17 @@ const AudioScreen = ({ navigation }) => {
         throw new Error('Invalid response from API');
       }
 
-      const processedTracks = response.data.tracks.map(track => ({
-        id: track._id,
-        title: track.title,
-        reciter: track.artist,
-        image: typeof track.coverImage === 'string' ? 
-          { uri: getMediaUrl(track.coverImage) } : 
-          track.coverImage || defaultImage,
-        fileUrl: getMediaUrl(track.audioFile),
-        duration: track.duration || '0:00'
-      }));
+      const processedTracks = response.data.tracks
+        .map(track => ({
+          id: track._id,
+          title: track.title,
+          reciter: track.artist,
+          image: typeof track.coverImage === 'string' ? 
+            { uri: getMediaUrl(track.coverImage) } : 
+            track.coverImage || defaultImage,
+          fileUrl: getMediaUrl(track.audioFile),
+          duration: track.duration || '0:00'
+        }));
 
       setTracks(processedTracks);
       setRetryCount(0);
@@ -356,6 +363,15 @@ const AudioScreen = ({ navigation }) => {
     fetchTracks();
     fetchAlbums();
   }, []);
+
+  // Add cleanup for audio when component unmounts
+  useEffect(() => {
+    return () => {
+      if (sound) {
+        sound.unloadAsync().catch(console.error);
+      }
+    };
+  }, [sound]);
 
   // Render loading state with better feedback
   const renderLoadingState = () => (
@@ -427,18 +443,23 @@ const AudioScreen = ({ navigation }) => {
     );
   };
 
-  // Handle track selection from list
+  // Handle track selection from album
   const handleTrackSelect = async (track: RecitationItem) => {
     try {
       // Stop current playback if any
       if (sound) {
-        await sound.unloadAsync();
+        try {
+          await sound.unloadAsync();
+        } catch (error) {
+          console.log('Error unloading previous sound:', error);
+        }
         setSound(null);
       }
 
       // Set the new track and start playback
       setCurrentTrack(track);
       await playAudio(track);
+      setSelectedAlbum(null); // Close album modal after selection
     } catch (error) {
       console.error('Error selecting track:', error);
       setError('Failed to play selected track');
@@ -973,7 +994,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     padding: 12,
-    backgroundColor: "rgba(12, 7, 7, 0.72)",
+    backgroundColor: "rgba(0, 0, 0, 0.72)",
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.1)',
     borderBottomWidth: 1,
@@ -1030,7 +1051,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: COLORS.primary,
+    color: '#000000',
   },
   errorContainer: {
     flex: 1,
@@ -1040,13 +1061,13 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: COLORS.error,
+    color: '#000000',
     textAlign: 'center',
     marginTop: 16,
     marginBottom: 24,
   },
   retryButton: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: '#000000',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -1067,7 +1088,7 @@ const styles = StyleSheet.create({
   },
   progressTime: {
     fontSize: 12,
-    color: '#666',
+    color: '#000000',
   },
   progressBar: {
     height: 4,
@@ -1098,17 +1119,17 @@ const styles = StyleSheet.create({
   trackTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#222',
+    color: '#000000',
     marginBottom: 6,
   },
   trackArtist: {
     fontSize: 14,
-    color: '#666',
+    color: '#000000',
     marginBottom: 4,
   },
   trackDuration: {
     fontSize: 12,
-    color: '#999',
+    color: '#000000',
   },
   playButton: {
     width: 48,
@@ -1132,7 +1153,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: 'white',
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: '#000000',
     ...SHADOWS.light,
   },
   albumsContainer: {
@@ -1174,12 +1195,12 @@ const styles = StyleSheet.create({
   albumTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#222',
+    color: '#000000',
     marginBottom: 4,
   },
   albumArtist: {
     fontSize: 12,
-    color: '#666',
+    color: '#000000',
     marginBottom: 6,
   },
   albumMeta: {
@@ -1189,7 +1210,7 @@ const styles = StyleSheet.create({
   },
   trackCount: {
     fontSize: 11,
-    color: '#999',
+    color: '#000000',
     backgroundColor: 'rgba(0, 0, 0, 0.05)',
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -1226,16 +1247,16 @@ const styles = StyleSheet.create({
   trackListItemTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#222',
+    color: '#000000',
     marginBottom: 4,
   },
   trackListItemArtist: {
     fontSize: 13,
-    color: '#666',
+    color: '#000000',
   },
   trackListItemDuration: {
     fontSize: 12,
-    color: '#999',
+    color: '#000000',
     marginLeft: 8,
   },
   trackListItemPlay: {

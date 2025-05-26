@@ -30,7 +30,7 @@ const QuranNavigator = () => {
   return (
     <QuranStack.Navigator
       screenOptions={{
-        headerShown: true,
+        headerShown: false,
         headerStyle: {
           backgroundColor: COLORS.primary,
         },
@@ -96,7 +96,7 @@ const EventsNavigator = () => {
   return (
     <EventsStack.Navigator
       screenOptions={{
-        headerShown: true,
+        headerShown: false,
         headerStyle: {
           backgroundColor: COLORS.primary,
         },
@@ -136,7 +136,7 @@ const TabNavigator = () => {
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.primary }} edges={["top"]}>
       <Tab.Navigator
         screenOptions={{
-          tabBarActiveTintColor: COLORS.primary,
+          tabBarActiveTintColor: 'rgb(1, 3, 6) ',
           tabBarInactiveTintColor: COLORS.textSecondary,
           tabBarStyle: {
             backgroundColor: COLORS.background,

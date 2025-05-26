@@ -76,7 +76,7 @@ export const LIGHT_COLORS = {
   divider: "rgba(0, 0, 0, 0.1)",
 
   // Gradients and transparencies
-  primaryTransparent: "rgba(0, 169, 157, 0.1)",
+  primaryTransparent: "rgba(12, 14, 14, 0.8)",
   secondaryTransparent: "rgba(242, 201, 76, 0.2)",
 
   // Prayer status colors
