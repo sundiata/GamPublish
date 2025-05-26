@@ -55,10 +55,6 @@ export default function HomeScreen({ navigation }) {
   const [animation] = useState(new Animated.Value(0));
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const searchTimeoutRef = useRef(null);
   const countdownIntervalRef = useRef(null);
 
   // Initialize and update time-related states
@@ -133,9 +129,6 @@ export default function HomeScreen({ navigation }) {
       clearInterval(timeInterval);
       if (countdownIntervalRef.current) {
         clearInterval(countdownIntervalRef.current);
-      }
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
       }
     };
   }, []);
@@ -287,54 +280,6 @@ export default function HomeScreen({ navigation }) {
     setProgress(progress);
   };
 
-  // Handle search input
-  const handleSearch = (text) => {
-    setSearchQuery(text);
-
-    // Clear previous timeout
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-
-    // Set a new timeout to simulate API call delay
-    if (text.length > 2) {
-      setIsSearching(true);
-      searchTimeoutRef.current = setTimeout(() => {
-        // Mock search results
-        const mockResults = [
-          {
-            surahNumber: 1,
-            surahName: "Al-Fatiha",
-            verseNumber: 1,
-            text: "In the name of Allah, the Entirely Merciful, the Especially Merciful.",
-          },
-          {
-            surahNumber: 2,
-            surahName: "Al-Baqarah",
-            verseNumber: 255,
-            text: "Allah - there is no deity except Him, the Ever-Living, the Sustainer of [all] existence.",
-          },
-          {
-            surahNumber: 112,
-            surahName: "Al-Ikhlas",
-            verseNumber: 1,
-            text: 'Say, "He is Allah, [who is] One."',
-          },
-        ].filter(
-          (item) =>
-            item.surahName.toLowerCase().includes(text.toLowerCase()) ||
-            item.text.toLowerCase().includes(text.toLowerCase())
-        );
-
-        setSearchResults(mockResults);
-        setIsSearching(false);
-      }, 500);
-    } else {
-      setSearchResults([]);
-      setIsSearching(false);
-    }
-  };
-
   // Navigate to prayer times page
   const navigateToPrayerTimes = () => {
     navigation.navigate("Prayer Times");
@@ -399,76 +344,6 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  // Render search results
-  const renderSearchResults = () => {
-    if (searchQuery.length < 3) return null;
-
-    if (isSearching) {
-      return (
-        <View
-          style={[
-            styles.searchResultsContainer,
-            { backgroundColor: colors.cardBackground },
-          ]}
-        >
-          <ActivityIndicator color={colors.background} />
-          <Text style={[styles.searchingText, { color: colors.textSecondary }]}>
-            Searching...
-          </Text>
-        </View>
-      );
-    }
-
-    if (searchResults.length === 0 && searchQuery.length >= 3) {
-      return (
-        <View
-          style={[
-            styles.searchResultsContainer,
-            { backgroundColor: colors.cardBackground },
-          ]}
-        >
-          <Text style={[styles.noResultsText, { color: colors.textSecondary }]}>
-            No results found
-          </Text>
-        </View>
-      );
-    }
-
-    return (
-      <View
-        style={[
-          styles.searchResultsContainer,
-          { backgroundColor: colors.cardBackground },
-        ]}
-      >
-        <Text style={[styles.searchResultsTitle, { color: colors.text }]}>
-          Search Results
-        </Text>
-        {searchResults.slice(0, 5).map((result, index) => (
-          <TouchableOpacity key={index} style={styles.searchResultItem}>
-            <Text style={[styles.searchResultSurah, { color: colors.primary }]}>
-              {result.surahNumber}. {result.surahName} - Verse{" "}
-              {result.verseNumber}
-            </Text>
-            <Text
-              style={[styles.searchResultText, { color: colors.textSecondary }]}
-              numberOfLines={2}
-            >
-              {result.text}
-            </Text>
-          </TouchableOpacity>
-        ))}
-        {searchResults.length > 5 && (
-          <TouchableOpacity style={styles.viewMoreButton}>
-            <Text style={[styles.viewMoreText, { color: colors.primary }]}>
-              View more results
-            </Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
-  };
-
   // Helper function to get prayer icon
   const getPrayerIcon = (category: string): 'sunrise' | 'sun' | 'sunset' | 'moon' => {
     switch (category.toLowerCase()) {
@@ -517,56 +392,24 @@ export default function HomeScreen({ navigation }) {
           {/* Top Header Row */}
           <View style={styles.headerTopRow}>
             <View>
-              <Text style={[styles.islamicDate, { color: colors.background }]}>
+              <Text style={[styles.islamicDate, { color: 'black' }]}>
                 {islamicDate}
               </Text>
-              <Text style={[styles.location, { color: colors.background }]}>
+              <Text style={[styles.location, { color: 'black' }]}>
                 {location}
               </Text>
             </View>
-            <TouchableOpacity style={styles.notificationButton}>
+           
+          </View>
+           <TouchableOpacity style={styles.notificationButton}>
               <Ionicons
                 name="notifications-outline"
-                size={24}
-                color={colors.background}
+                size={40}
+                color={'black'}
               />
             </TouchableOpacity>
-          </View>
 
-          {/* Search Bar */}
-          <View style={styles.searchContainer}>
-            <Ionicons
-              name="search"
-              size={20}
-              color={colors.background}
-              style={styles.searchIcon}
-            />
-            <TextInput
-              style={[styles.searchInput, { color: colors.background }]}
-              placeholder="Search surah, narrators or keywords"
-              placeholderTextColor="rgba(255, 255, 255, 0.7)"
-              value={searchQuery}
-              onChangeText={handleSearch}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity
-                style={styles.clearSearchButton}
-                onPress={() => {
-                  setSearchQuery("");
-                  setSearchResults([]);
-                }}
-              >
-                <Ionicons
-                  name="close-circle"
-                  size={20}
-                  color={colors.background}
-                />
-              </TouchableOpacity>
-            )}
-          </View>
 
-          {/* Search Results */}
-          {renderSearchResults()}
         </View>
 
         <ScrollView
@@ -577,13 +420,13 @@ export default function HomeScreen({ navigation }) {
           <View
             style={[
               styles.timeDisplay,
-              { backgroundColor: colors.headerBackground },
+              { backgroundColor: 'white' },
             ]}
           >
-            <Text style={[styles.currentTime, { color: colors.textLight }]}>
+            <Text style={[styles.currentTime, { color: 'black' }]}>
               {currentTime}
             </Text>
-            <Text style={[styles.timeInfo, { color: colors.textLight }]}>
+            <Text style={[styles.timeInfo, { color: 'black' }]}>
               {isLoading ? 'Loading prayer times...' : 
                error ? error :
                nextPrayer ? `${nextPrayer.name} · ${countdown} left` : 'No prayer times available'}
@@ -597,12 +440,12 @@ export default function HomeScreen({ navigation }) {
                     <Feather
                       name={getPrayerIcon(name)}
                       size={20}
-                      color={colors.textLight}
+                      color={'black'}
                     />
-                    <Text style={[styles.prayerTimeLabel, { color: colors.textLight }]}>
+                    <Text style={[styles.prayerTimeLabel, { color: 'black' }]}>
                       {name.charAt(0).toUpperCase() + name.slice(1)}
                     </Text>
-                    <Text style={[styles.prayerTimeValue, { color: colors.textLight }]}>
+                    <Text style={[styles.prayerTimeValue, { color: 'black' }]}>
                       {time}
                     </Text>
                   </View>
@@ -630,8 +473,8 @@ export default function HomeScreen({ navigation }) {
               {renderFeatureButton(
                 <Ionicons
                   name="book-outline"
-                  size={24}
-                  color={colors.textLight}
+                  size={30}
+                  color={'black'}
                 />,
                 "Quran",
                 "Quran"
@@ -639,8 +482,8 @@ export default function HomeScreen({ navigation }) {
               {renderFeatureButton(
                 <Ionicons
                   name="volume-high-outline"
-                  size={24}
-                  color={colors.textLight}
+                  size={30}
+                  color={'black'}
                 />,
                 "Adzan",
                 "Adzan"
@@ -648,8 +491,8 @@ export default function HomeScreen({ navigation }) {
               {renderFeatureButton(
                 <Ionicons
                   name="compass-outline"
-                  size={24}
-                  color={colors.textLight}
+                  size={30}
+                  color={'black'}
                 />,
                 "Qibla",
                 "Qibla"
@@ -657,8 +500,8 @@ export default function HomeScreen({ navigation }) {
               {renderFeatureButton(
                 <Ionicons
                   name="heart-outline"
-                  size={24}
-                  color={colors.textLight}
+                  size={30}
+                  color={'black'}
                 />,
                 "Donation",
                 "Donation"
@@ -666,8 +509,8 @@ export default function HomeScreen({ navigation }) {
               {renderFeatureButton(
                 <Ionicons
                   name="grid-outline"
-                  size={24}
-                  color={colors.textLight}
+                  size={30}
+                  color={'black'}
                 />,
                 "All",
                 "AllFeatures"
@@ -760,7 +603,9 @@ export default function HomeScreen({ navigation }) {
             <TouchableOpacity
               style={[
                 styles.continueListeningCard,
-                { backgroundColor: colors.cardBackground },
+                { backgroundColor: 'rgba(35, 42, 42, 0.72)' },
+  
+
               ]}
               onPress={() =>
                 navigation.navigate("NowPlayingScreen", {
@@ -778,12 +623,12 @@ export default function HomeScreen({ navigation }) {
                 }}
                 style={[
                   styles.surahThumbnail,
-                  { backgroundColor: colors.primaryTransparent },
+                  { backgroundColor: 'white' },
                 ]}
               />
               <View style={styles.continueListeningInfo}>
                 <Text
-                  style={[styles.continueListeningTitle, { color: colors.text }]}
+                  style={[styles.continueListeningTitle, { color: 'white' }]}
                 >
                   2. Al-Baqarah
                 </Text>
@@ -800,12 +645,12 @@ export default function HomeScreen({ navigation }) {
                     <View
                       style={[
                         styles.progressFill,
-                        { width: `${progress}%`, backgroundColor: colors.primary },
+                        { width: `${progress}%`, backgroundColor: 'white' },
                       ]}
                     />
                   </View>
                   <Text
-                    style={[styles.progressText, { color: colors.textSecondary }]}
+                    style={[styles.progressText, { color: 'white' }]}
                   >
                     {countdown}
                   </Text>
@@ -887,7 +732,7 @@ export default function HomeScreen({ navigation }) {
                       <Feather
                         name={getPrayerIcon(name)}
                         size={24}
-                        color={isNext ? colors.secondary : colors.primary}
+                        color={isNext ? 'red' : 'black'}
                       />
                     </View>
                     <View style={styles.prayerNameTime}>
@@ -915,11 +760,12 @@ export default function HomeScreen({ navigation }) {
                     <View
                       style={[
                         styles.prayerStatus,
-                        { backgroundColor: statusStyle.backgroundColor },
+                        { backgroundColor: 'rgba(57, 62, 62, 0.47)' },
+                        
                       ]}
                     >
                       <Text
-                        style={[styles.statusText, { color: statusStyle.color }]}
+                        style={[styles.statusText, { color: 'white' }]}
                       >
                         {statusStyle.text}
                       </Text>
@@ -938,102 +784,52 @@ export default function HomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: '#FFFFFF',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
+    color: '#000000',
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
   },
   headerTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    bottom: 45,
+    
   },
   islamicDate: {
     fontSize: 16,
     fontWeight: "500",
+    color: 'red',
   },
   location: {
     fontSize: 14,
     opacity: 0.8,
+    color: '#000000',
   },
   notificationButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    // backgroundColor: "rgba(0, 0, 0, 0.1)",
     justifyContent: "center",
     alignItems: "center",
-  },
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    borderRadius: 8,
-    paddingHorizontal: 8,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    height: 40,
-    fontSize: 16,
-  },
-  clearSearchButton: {
-    padding: 8,
-  },
-  searchResultsContainer: {
-    borderRadius: 8,
-    marginTop: 8,
-    padding: 16,
-  },
-  searchResultsTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  searchResultItem: {
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
-  },
-  searchResultSurah: {
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  searchResultText: {
-    fontSize: 14,
-    marginTop: 2,
-  },
-  searchingText: {
-    fontSize: 16,
-    textAlign: "center",
-    marginTop: 8,
-  },
-  noResultsText: {
-    fontSize: 16,
-    textAlign: "center",
-  },
-  viewMoreButton: {
-    alignItems: "center",
-    paddingVertical: 8,
-    marginTop: 8,
-  },
-  viewMoreText: {
-    fontSize: 16,
-    fontWeight: "500",
+    bottom: 45,
   },
   scrollView: {
     flex: 1,
@@ -1043,17 +839,22 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
     borderBottomLeftRadius: 16,
     borderBottomRightRadius: 16,
+    backgroundColor: '#FFFFFF',
+    bottom: 15,
+    
   },
   currentTime: {
     fontSize: 48,
     fontWeight: "bold",
     textAlign: "center",
     marginTop: 16,
+    color: '#000000',
   },
   timeInfo: {
     fontSize: 16,
     textAlign: "center",
     marginBottom: 16,
+    color: '#000000',
   },
   prayerTimesRow: {
     flexDirection: "row",
@@ -1067,10 +868,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 4,
     marginBottom: 2,
+    color: '#000000',
   },
   prayerTimeValue: {
     fontSize: 14,
     fontWeight: "500",
+    color: '#000000',
   },
   indicator: {
     alignItems: "center",
@@ -1080,15 +883,18 @@ const styles = StyleSheet.create({
     width: 32,
     height: 4,
     borderRadius: 2,
+    backgroundColor: '#000000',
   },
   // Favorites Section
   favoritesSection: {
     padding: 16,
+    backgroundColor: '#FFFFFF',
   },
   sectionLabel: {
     fontSize: 16,
     fontWeight: "600",
     marginBottom: 8,
+    color: '#000000',
   },
   favoritesContainer: {
     flexDirection: "row",
@@ -1099,18 +905,22 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     marginRight: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
   },
   favoriteChipText: {
     fontSize: 14,
     fontWeight: "500",
+    color: '#000000',
   },
   // Continue Listening Section
   continueListeningSection: {
     padding: 16,
+    backgroundColor: '#FFFFFF',
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "600",
+    color: '#000000',
     marginBottom: 8,
   },
   continueListeningCard: {
@@ -1119,6 +929,7 @@ const styles = StyleSheet.create({
     padding: 8,
     marginVertical: 8,
     alignItems: "center",
+    backgroundColor: '#FFFFFF',
   },
   surahThumbnail: {
     width: 60,
@@ -1132,10 +943,12 @@ const styles = StyleSheet.create({
   continueListeningTitle: {
     fontSize: 16,
     fontWeight: "600",
+    color: '#000000',
   },
   continueListeningSubtitle: {
     fontSize: 14,
     marginBottom: 4,
+    color: '#000000',
   },
   progressContainer: {
     flexDirection: "row",
@@ -1152,9 +965,11 @@ const styles = StyleSheet.create({
   progressFill: {
     height: "100%",
     borderRadius: 2,
+    backgroundColor: '#000000',
   },
   progressText: {
     fontSize: 10,
+    color: '#000000',
   },
   playButton: {
     width: 40,
@@ -1162,10 +977,12 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
   },
   // Features Section
   featuresSection: {
     padding: 16,
+    backgroundColor: '#FFFFFF',
   },
   featuresGrid: {
     flexDirection: "row",
@@ -1184,14 +1001,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
   },
   featureLabel: {
     fontSize: 14,
     textAlign: "center",
+    color: '#000000',
   },
   // Daily Prayers Section - Enhanced
   dailyPrayersSection: {
     padding: 16,
+    backgroundColor: '#FFFFFF',
   },
   sectionHeader: {
     flexDirection: "row",
@@ -1202,20 +1022,23 @@ const styles = StyleSheet.create({
   viewAllText: {
     fontSize: 16,
     fontWeight: "500",
+    color: '#000000',
   },
   prayersListContainer: {
     borderRadius: 8,
     overflow: "hidden",
+    backgroundColor: '#FFFFFF',
   },
   enhancedPrayerItem: {
     flexDirection: "row",
     alignItems: "center",
     padding: 16,
     borderBottomWidth: 1,
+    borderBottomColor: '#000000',
   },
   nextPrayerItem: {
     borderLeftWidth: 3,
-    borderLeftColor: "#FFC107",
+    borderLeftColor: '#000000',
   },
   prayerIconContainer: {
     width: 40,
@@ -1224,6 +1047,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
   },
   prayerNameTime: {
     flex: 1,
@@ -1233,20 +1057,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
     marginBottom: 4,
+    color: '#000000',
   },
   nextPrayerText: {
     fontWeight: "700",
+    color: '#000000',
   },
   prayerSchedule: {
     fontSize: 14,
+    color: '#000000',
   },
   prayerStatus: {
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
   },
   statusText: {
     fontSize: 14,
     fontWeight: "500",
+    color: '#FFFFFF',
   },
 });
