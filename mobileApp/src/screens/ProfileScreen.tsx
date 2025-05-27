@@ -1,5 +1,5 @@
 "use client";
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,20 +14,66 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS, SIZES, SHADOWS } from "../constants/theme";
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
+import { useTheme } from '../context/ThemeContext';
+import Header from '../components/Header';
+import * as Location from "expo-location";
+import { fetchIslamicDate } from "../services/api";
 
 const { width } = Dimensions.get('window');
 
-const ProfileScreen = ({ navigation }) => {
-  // Sample user data - in a real app, this would come from your auth/user context
+const ProfileScreen = () => {
+  const navigation = useNavigation();
+  const { colors, isDarkMode } = useTheme();
+  const [islamicDate, setIslamicDate] = useState('');
+  const [location, setLocation] = useState('Loading location...');
+
+  useEffect(() => {
+    loadIslamicDate();
+    loadLocation();
+  }, []);
+
+  const loadIslamicDate = async () => {
+    try {
+      const hijriDate = await fetchIslamicDate();
+      setIslamicDate(hijriDate.format);
+    } catch (error) {
+      console.error("Error loading Islamic date:", error);
+      setIslamicDate('Loading date...');
+    }
+  };
+
+  const loadLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === "granted") {
+        const position = await Location.getCurrentPositionAsync({});
+        const geocode = await Location.reverseGeocodeAsync({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+
+        if (geocode && geocode[0]) {
+          const { city, country } = geocode[0];
+          const locationName = `${city || "Unknown"}, ${country || "Unknown"}`;
+          setLocation(locationName);
+        }
+      }
+    } catch (error) {
+      console.error("Error getting location:", error);
+      setLocation('Location unavailable');
+    }
+  };
+
   const user = {
-    name: 'Sundiata keita',
-    email: 'sundiata@gmail.com',
+    name: 'John Doe',
+    email: 'john.doe@example.com',
     profileImage: 'https://via.placeholder.com/150',
     stats: {
-      prayersCompleted: 42,
-      quranRead: 15,
-      eventsAttended: 3
-    }
+      prayersCompleted: 156,
+      quranRead: 23,
+      eventsAttended: 5,
+    },
   };
 
   const menuItems = [
@@ -45,157 +91,188 @@ const ProfileScreen = ({ navigation }) => {
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
+    <SafeAreaView 
+      style={[styles.container, { backgroundColor: colors.primary }]}
+      edges={['top', 'left', 'right']}
+    >
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
       
-      {/* Header */}
-      <LinearGradient
-        colors={[COLORS.primary, COLORS.tertiary]}
-        style={styles.header}
-      >
-        <SafeAreaView edges={['right', 'left', 'bottom']} style={styles.headerContent}>
-          <View style={styles.profileImageContainer}>
-            <Image
-              source={{ uri: user.profileImage }}
-              style={styles.profileImage}
-            />
-            <TouchableOpacity style={styles.editButton}>
-              <Ionicons name="camera" size={20} color="white" />
-            </TouchableOpacity>
+      <View style={{ flex: 1, backgroundColor: colors.primary }}>
+        <Header 
+          islamicDate={islamicDate}
+          location={location}
+          onNotificationPress={() => {
+            console.log('Notification pressed');
+          }}
+        />
+
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.profileSection}>
+            <LinearGradient
+              colors={['rgba(0, 0, 0, 0.1)', 'rgba(0, 0, 0, 0.05)']}
+              style={styles.profileGradient}
+            >
+              <View style={styles.profileImageContainer}>
+                <Image
+                  source={{ uri: user.profileImage }}
+                  style={styles.profileImage}
+                />
+                <TouchableOpacity style={styles.editButton}>
+                  <Ionicons name="camera" size={20} color="white" />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.userName}>{user.name}</Text>
+              <Text style={styles.userEmail}>{user.email}</Text>
+            </LinearGradient>
           </View>
-          <Text style={styles.userName}>{user.name}</Text>
-          <Text style={styles.userEmail}>{user.email}</Text>
-        </SafeAreaView>
-      </LinearGradient>
 
-      {/* Stats */}
-      <View style={styles.statsContainer}>
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>{user.stats.prayersCompleted}</Text>
-          <Text style={styles.statLabel}>Prayers Completed</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>{user.stats.quranRead}</Text>
-          <Text style={styles.statLabel}>Quran Read</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>{user.stats.eventsAttended}</Text>
-          <Text style={styles.statLabel}>Events Attended</Text>
-        </View>
-      </View>
-
-      {/* Menu Items */}
-      <ScrollView style={styles.menuContainer}>
-        {menuItems.map((item, index) => (
-          <TouchableOpacity
-            key={index}
-            style={styles.menuItem}
-            onPress={() => handleMenuItemPress(item.label)}
-          >
-            <View style={[styles.menuIconContainer, { backgroundColor: item.color + '20' }]}>
-              <Ionicons name={item.icon} size={24} color={item.color} />
+          <View style={styles.statsContainer}>
+            <View style={styles.statItem}>
+              <View style={styles.statIconContainer}>
+                <Ionicons name="time-outline" size={24} color="black" />
+              </View>
+              <Text style={styles.statValue}>{user.stats.prayersCompleted}</Text>
+              <Text style={styles.statLabel}>Prayers</Text>
             </View>
-            <Text style={styles.menuItemText}>{item.label}</Text>
-            <Ionicons name="chevron-forward" size={20} color={COLORS.accent2} />
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-    </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <View style={styles.statIconContainer}>
+                <Ionicons name="book-outline" size={24} color="black" />
+              </View>
+              <Text style={styles.statValue}>{user.stats.quranRead}</Text>
+              <Text style={styles.statLabel}>Quran</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <View style={styles.statIconContainer}>
+                <Ionicons name="calendar-outline" size={24} color="black" />
+              </View>
+              <Text style={styles.statValue}>{user.stats.eventsAttended}</Text>
+              <Text style={styles.statLabel}>Events</Text>
+            </View>
+          </View>
+
+          <View style={styles.menuContainer}>
+            {menuItems.map((item, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.menuItem}
+                onPress={() => handleMenuItemPress(item.label)}
+              >
+                <View style={[styles.menuIconContainer, { backgroundColor: 'rgba(0, 0, 0, 0.1)' }]}>
+                  <Ionicons name={item.icon} size={24} color="black" />
+                </View>
+                <Text style={styles.menuItemText}>{item.label}</Text>
+                <Ionicons name="chevron-forward" size={20} color="black" />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
+      </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: '#FFFFFF',
   },
-  header: {
-    paddingBottom: 30,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+  content: {
+    flex: 1,
+    padding: 20,
+  },
+  profileSection: {
+    marginBottom: 20,
+    borderRadius: 20,
+    overflow: 'hidden',
     ...SHADOWS.medium,
   },
-  headerContent: {
+  profileGradient: {
+    padding: 20,
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
   },
   profileImageContainer: {
     position: 'relative',
-    marginBottom: 15,
+    marginBottom: 16,
   },
   profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 3,
-    borderColor: 'white',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 4,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
   },
   editButton: {
     position: 'absolute',
     bottom: 0,
     right: 0,
-    backgroundColor: COLORS.accent1,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.primary,
     justifyContent: 'center',
+    alignItems: 'center',
     ...SHADOWS.light,
   },
   userName: {
-    color: 'white',
     fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 5,
+    fontWeight: '600',
+    color: 'black',
+    marginBottom: 4,
   },
   userEmail: {
-    color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 16,
+    color: 'black',
   },
   statsContainer: {
     flexDirection: 'row',
     backgroundColor: 'white',
-    marginHorizontal: 20,
-    marginTop: -20,
-    borderRadius: 15,
-    paddingVertical: 20,
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
     ...SHADOWS.medium,
   },
   statItem: {
     flex: 1,
     alignItems: 'center',
   },
+  statIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   statValue: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-    marginBottom: 5,
+    fontWeight: '600',
+    color: 'black',
+    marginBottom: 4,
   },
   statLabel: {
     fontSize: 14,
-    color: COLORS.accent2,
+    color: 'black',
   },
   statDivider: {
     width: 1,
+    height: '100%',
     backgroundColor: 'rgba(0, 0, 0, 0.1)',
-    marginVertical: 10,
   },
   menuContainer: {
-    flex: 1,
-    marginTop: 20,
-    paddingHorizontal: 20,
+    backgroundColor: 'white',
+    borderRadius: 20,
+    overflow: 'hidden',
+    ...SHADOWS.medium,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'white',
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 10,
-    ...SHADOWS.light,
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
   },
   menuIconContainer: {
     width: 40,
@@ -208,7 +285,7 @@ const styles = StyleSheet.create({
   menuItemText: {
     flex: 1,
     fontSize: 16,
-    color: COLORS.text,
+    color: 'black',
     fontWeight: '500',
   },
 });

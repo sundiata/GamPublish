@@ -1,36 +1,69 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, Dimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { COLORS, SIZES } from '../constants/theme';
-import { getPrayerTimes, getAllPrayers, Prayer, PrayerTimes } from '../services/api';
-
-interface DisplayPrayer {
-  id: string;
-  name: string;
-  time: string;
-  icon: 'sunrise' | 'sun' | 'sunset' | 'moon';
-}
+import Header from '../components/Header';
+import { getPrayerTimes, PrayerTimes } from '../services/api';
+import * as Location from "expo-location";
+import { fetchIslamicDate } from "../services/api";
 
 const { width } = Dimensions.get('window');
 
 const PrayerTimesScreen: React.FC = () => {
-  const [prayerTimes, setPrayerTimes] = useState<PrayerTimes | null>(null);
-  const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
   const [hijriDate, setHijriDate] = useState('');
-  const [nextPrayer, setNextPrayer] = useState({ name: 'Fajr', time: '05:00', remaining: '2h 30m' });
-  const [prayers, setPrayers] = useState<DisplayPrayer[]>([]);
+  const [nextPrayer, setNextPrayer] = useState({ name: '', time: '', remaining: '' });
+  const [prayerTimes, setPrayerTimes] = useState<PrayerTimes | null>(null);
+  const [location, setLocation] = useState('Loading location...');
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchPrayerTimes();
-    fetchAllPrayers();
-    updateTime();
+    initializeScreen();
     const timer = setInterval(updateTime, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  const initializeScreen = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Get user location
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === "granted") {
+        const position = await Location.getCurrentPositionAsync({});
+        const geocode = await Location.reverseGeocodeAsync({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+
+        if (geocode && geocode[0]) {
+          const { city, country } = geocode[0];
+          const locationName = `${city || "Unknown"}, ${country || "Unknown"}`;
+          setLocation(locationName);
+        }
+      }
+
+      // Get Islamic Date
+      const hijriDate = await fetchIslamicDate();
+      setHijriDate(hijriDate.format);
+
+      // Get Prayer Times
+      const times = await getPrayerTimes();
+      console.log('Fetched prayer times:', times);
+      setPrayerTimes(times);
+      updateNextPrayer(times);
+
+    } catch (error) {
+      console.error("Error initializing screen:", error);
+      setError("Failed to load prayer times. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const getPrayerIcon = (category: string): 'sunrise' | 'sun' | 'sunset' | 'moon' => {
     switch (category.toLowerCase()) {
@@ -50,27 +83,6 @@ const PrayerTimesScreen: React.FC = () => {
     }
   };
 
-  const fetchAllPrayers = async () => {
-    try {
-      console.log('Fetching all prayers...');
-      const response = await getAllPrayers();
-      console.log('Prayers response:', response);
-      
-      // Transform API prayers into display format
-      const displayPrayers: DisplayPrayer[] = response.prayers.map(prayer => ({
-        id: prayer._id,
-        name: prayer.title,
-        time: prayer.time,
-        icon: getPrayerIcon(prayer.category)
-      }));
-
-      setPrayers(displayPrayers);
-    } catch (error) {
-      console.error('Error fetching prayers:', error);
-      setError('Failed to load prayers. Please try again.');
-    }
-  };
-
   const updateTime = () => {
     const now = new Date();
     setCurrentTime(now.toLocaleTimeString('en-US', { 
@@ -84,26 +96,14 @@ const PrayerTimesScreen: React.FC = () => {
       month: 'long',
       year: 'numeric'
     }));
-    setHijriDate('28 Rabi\'ul awal, 1445 H');
-  };
-
-  const fetchPrayerTimes = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const times = await getPrayerTimes();
-      console.log('Fetched prayer times:', times);
-      setPrayerTimes(times);
-      updateNextPrayer(times);
-    } catch (error) {
-      console.error('Error fetching prayer times:', error);
-      setError('Failed to load prayer times. Please try again.');
-    } finally {
-      setLoading(false);
+    if (prayerTimes) {
+      updateNextPrayer(prayerTimes);
     }
   };
 
   const updateNextPrayer = (times: PrayerTimes) => {
+    if (!times) return;
+
     const now = new Date();
     const currentHour = now.getHours();
     const currentMinute = now.getMinutes();
@@ -143,20 +143,58 @@ const PrayerTimesScreen: React.FC = () => {
     });
   };
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header Section */}
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View>
-            <Text style={styles.location}>Gambia, Kanifing Layout</Text>
-            <Text style={styles.date}>{currentDate}</Text>
-            <Text style={styles.hijriDate}>{hijriDate}</Text>
-          </View>
-          <TouchableOpacity style={styles.settingsButton}>
-            <Ionicons name="settings-outline" size={24} color={COLORS.background} />
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <Header 
+          islamicDate={hijriDate}
+          location={location}
+          onNotificationPress={() => {
+            console.log('Notification pressed');
+          }}
+        />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="black" />
+          <Text style={styles.loadingText}>Loading prayer times...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <Header 
+          islamicDate={hijriDate}
+          location={location}
+          onNotificationPress={() => {
+            console.log('Notification pressed');
+          }}
+        />
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={initializeScreen}>
+            <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <Header 
+        islamicDate={hijriDate}
+        location={location}
+        onNotificationPress={() => {
+          console.log('Notification pressed');
+        }}
+      />
+
+      {/* Current Time and Date */}
+      <View style={styles.timeDisplay}>
+        <Text style={styles.currentTime}>{currentTime}</Text>
+        <Text style={styles.currentDate}>{currentDate}</Text>
       </View>
 
       {/* Next Prayer Card */}
@@ -171,46 +209,30 @@ const PrayerTimesScreen: React.FC = () => {
 
       {/* Prayer Times List */}
       <ScrollView style={styles.prayerList} showsVerticalScrollIndicator={false}>
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Loading prayer times...</Text>
-          </View>
-        ) : error ? (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity 
-              style={styles.retryButton}
-              onPress={fetchPrayerTimes}
-            >
-              <Text style={styles.retryButtonText}>Retry</Text>
+        {prayerTimes && Object.entries(prayerTimes).map(([name, time]) => (
+          <View key={name} style={styles.prayerItem}>
+            <View style={styles.prayerItemLeft}>
+              <View style={styles.iconContainer}>
+                <Feather 
+                  name={getPrayerIcon(name)} 
+                  size={24} 
+                  color="black" 
+                />
+              </View>
+              <View style={styles.prayerInfo}>
+                <Text style={styles.prayerName}>{name.charAt(0).toUpperCase() + name.slice(1)}</Text>
+                <Text style={styles.prayerTime}>{time}</Text>
+              </View>
+            </View>
+            <TouchableOpacity style={styles.prayerNotificationButton}>
+              <Ionicons 
+                name="notifications-outline" 
+                size={22} 
+                color="black" 
+              />
             </TouchableOpacity>
           </View>
-        ) : prayerTimes ? (
-          Object.entries(prayerTimes).map(([name, time]) => (
-            <View key={name} style={styles.prayerItem}>
-              <View style={styles.prayerItemLeft}>
-                <View style={styles.iconContainer}>
-                  <Feather 
-                    name={getPrayerIcon(name)} 
-                    size={24} 
-                    color={COLORS.primary} 
-                  />
-                </View>
-                <View style={styles.prayerInfo}>
-                  <Text style={styles.prayerName}>{name.charAt(0).toUpperCase() + name.slice(1)}</Text>
-                  <Text style={styles.prayerTime}>{time}</Text>
-                </View>
-              </View>
-              <TouchableOpacity style={styles.notificationButton}>
-                <Ionicons 
-                  name="notifications-outline" 
-                  size={22} 
-                  color={COLORS.primary} 
-                />
-              </TouchableOpacity>
-            </View>
-          ))
-        ) : null}
+        ))}
       </ScrollView>
     </SafeAreaView>
   );
@@ -219,138 +241,17 @@ const PrayerTimesScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.primary,
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  location: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: COLORS.background,
-    marginBottom: 4,
-  },
-  date: {
-    fontSize: 14,
-    color: COLORS.background,
-    opacity: 0.9,
-    marginBottom: 2,
-  },
-  hijriDate: {
-    fontSize: 14,
-    color: COLORS.background,
-    opacity: 0.8,
-  },
-  settingsButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  nextPrayerCard: {
-    margin: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 15,
-    overflow: 'hidden',
-  },
-  nextPrayerContent: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  nextPrayerLabel: {
-    fontSize: 14,
-    color: COLORS.background,
-    opacity: 0.9,
-    marginBottom: 8,
-  },
-  nextPrayerName: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: COLORS.background,
-    marginBottom: 4,
-  },
-  nextPrayerTime: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: COLORS.background,
-    marginBottom: 8,
-  },
-  remainingTime: {
-    fontSize: 16,
-    color: COLORS.background,
-    opacity: 0.9,
-  },
-  prayerList: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    paddingTop: 20,
-    paddingHorizontal: 16,
-  },
-  prayerItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    marginBottom: 8,
-    backgroundColor: 'white',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-  },
-  prayerItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  iconContainer: {
-    width: 45,
-    height: 45,
-    borderRadius: 23,
-    backgroundColor: `${COLORS.primary}15`,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 15,
-  },
-  prayerInfo: {
-    flex: 1,
-    marginRight: 12,
-  },
-  prayerName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: 4,
-  },
-  prayerTime: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-  },
-  notificationButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: `${COLORS.primary}15`,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
   },
   loadingText: {
+    marginTop: 16,
     fontSize: 16,
-    color: COLORS.text,
+    color: 'black',
   },
   errorContainer: {
     flex: 1,
@@ -360,20 +261,115 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: COLORS.error,
+    color: 'black',
     textAlign: 'center',
     marginBottom: 16,
   },
   retryButton: {
-    backgroundColor: COLORS.primary,
     paddingHorizontal: 20,
     paddingVertical: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
     borderRadius: 8,
   },
   retryButtonText: {
-    color: 'white',
     fontSize: 16,
+    color: 'black',
+  },
+  timeDisplay: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  currentTime: {
+    fontSize: 48,
     fontWeight: 'bold',
+    color: 'black',
+  },
+  currentDate: {
+    fontSize: 16,
+    color: 'black',
+    opacity: 0.8,
+    marginTop: 8,
+  },
+  nextPrayerCard: {
+    margin: 20,
+    padding: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    borderRadius: 15,
+  },
+  nextPrayerContent: {
+    alignItems: 'center',
+  },
+  nextPrayerLabel: {
+    fontSize: 16,
+    color: 'black',
+    marginBottom: 8,
+  },
+  nextPrayerName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: 'black',
+    marginBottom: 4,
+  },
+  nextPrayerTime: {
+    fontSize: 20,
+    color: 'black',
+    marginBottom: 8,
+  },
+  remainingTime: {
+    fontSize: 16,
+    color: 'black',
+    opacity: 0.8,
+  },
+  prayerList: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  prayerItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+    marginRight: 10,
+  },
+  prayerItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  prayerInfo: {
+    flex: 1,
+  },
+  prayerName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'black',
+    marginBottom: 4,
+  },
+  prayerTime: {
+    fontSize: 14,
+    color: 'black',
+    opacity: 0.8,
+  },
+  prayerNotificationButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

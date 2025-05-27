@@ -5,10 +5,12 @@ import { API_ENDPOINTS, DEFAULT_PARAMS } from "../constants/api";
 const BASE_URL = "http://api.alquran.cloud/v1";
 
 const API_URL = Platform.select({
-  ios: 'http://127.0.0.1:4001',  // Base URL without /api
-  android: 'http://10.0.2.2:4001',
-  default: 'http://localhost:4001',
+  ios: 'http://127.0.0.1:4001/api',  // Changed from localhost to 127.0.0.1 for iOS
+  android: 'http://10.0.2.2:4001/api',
+  default: 'http://localhost:4001/api',
 });
+
+
 
 console.log('Platform:', Platform.OS);
 console.log('API URL:', API_URL);
@@ -25,13 +27,15 @@ export const api = axios.create({
 // Add request interceptor for logging
 api.interceptors.request.use(
   (config) => {
+    // Log the full request details
     console.log('API Request:', {
       method: config.method,
       url: config.url,
       baseURL: config.baseURL,
       headers: config.headers,
       data: config.data,
-      params: config.params
+      params: config.params,
+      fullUrl: `${config.baseURL}${config.url}`
     });
     return config;
   },
@@ -51,7 +55,8 @@ api.interceptors.response.use(
       config: {
         url: response.config.url,
         baseURL: response.config.baseURL,
-        method: response.config.method
+        method: response.config.method,
+        fullUrl: `${response.config.baseURL}${response.config.url}`
       }
     });
     return response;
@@ -67,7 +72,8 @@ api.interceptors.response.use(
       config: error.config ? {
         url: error.config.url,
         baseURL: error.config.baseURL,
-        method: error.config.method
+        method: error.config.method,
+        fullUrl: `${error.config.baseURL}${error.config.url}`
       } : 'No config'
     });
     return Promise.reject(error);
@@ -274,18 +280,56 @@ export const getAllPrayers = async (params?: {
   search?: string;
 }): Promise<{ prayers: Prayer[]; total: number; totalPages: number; currentPage: number }> => {
   try {
-    console.log('Fetching prayers with params:', params);
-    const response = await api.get<Prayer[]>('/prayers', { params });
-    console.log('Raw prayers response:', response);
+    console.log('=== Prayer API Request ===');
+    console.log('URL:', `${API_URL}/prayers`);
+    console.log('Params:', params);
+    console.log('Headers:', {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json'
+    });
+
+    const response = await api.get<{
+      status: string;
+      data: {
+        prayers: Prayer[];
+        total: number;
+        totalPages: number;
+        currentPage: number;
+      }
+    }>('/prayers', { 
+      params,
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      }
+    });
     
-    return {
-      prayers: response.data,
-      total: response.data.length,
-      totalPages: 1,
-      currentPage: 1
-    };
+    console.log('=== Prayer API Response ===');
+    console.log('Status:', response.status);
+    console.log('Headers:', response.headers);
+    console.log('Data:', JSON.stringify(response.data, null, 2));
+    
+    if (!response.data || response.data.status !== 'success') {
+      throw new Error('Invalid response from prayers API');
+    }
+
+    return response.data.data;
   } catch (error) {
-    console.error('Error fetching prayers:', error);
+    console.error('=== Prayer API Error ===');
+    console.error('Error:', error.message);
+    if (error.response) {
+      console.error('Error Response:', {
+        status: error.response.status,
+        data: error.response.data,
+        headers: error.response.headers,
+        config: {
+          url: error.config.url,
+          baseURL: error.config.baseURL,
+          method: error.config.method,
+          fullUrl: `${error.config.baseURL}${error.config.url}`
+        }
+      });
+    }
     throw error;
   }
 };
@@ -294,11 +338,35 @@ export const getAllPrayers = async (params?: {
 export const getPrayerTimes = async (): Promise<PrayerTimes> => {
   try {
     console.log('Fetching prayer times...');
-    const response = await api.get<PrayerTimes>('/api/prayers/times');
+    const response = await api.get<{ status: string; data: PrayerTimes }>('/prayer-times/times', {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      }
+    });
+    
     console.log('Prayer times response:', response.data);
-    return response.data;
+    
+    if (!response.data || response.data.status !== 'success') {
+      throw new Error('Invalid response from prayer times API');
+    }
+    
+    return response.data.data;
   } catch (error) {
     console.error('Error fetching prayer times:', error);
+    if (error.response) {
+      console.error('Error response details:', {
+        status: error.response.status,
+        data: error.response.data,
+        headers: error.response.headers,
+        config: {
+          url: error.config.url,
+          baseURL: error.config.baseURL,
+          method: error.config.method,
+          fullUrl: `${error.config.baseURL}${error.config.url}`
+        }
+      });
+    }
     // Return default prayer times if API fails
     return {
       fajr: "05:15",
@@ -558,29 +626,35 @@ export const getMediaUrl = (path: string) => {
   
   // If the path already includes 'uploads', use it as is
   if (cleanPath.startsWith('uploads/')) {
-    return `${API_URL}/${cleanPath}`;
+    return `${API_URL}/${cleanPath}`;  // Remove /api since it's in base URL
   }
   
   // Otherwise, assume it's a relative path and needs the uploads prefix
-  return `${API_URL}/uploads/${cleanPath}`;
+  return `${API_URL}/uploads/${cleanPath}`;  // Remove /api since it's in base URL
 };
 
-// Update the getAllTracks function to use getMediaUrl
+// Update getAllTracks with better error handling
 export const getAllTracks = async (params?: {
   page?: number;
   limit?: number;
   search?: string;
 }): Promise<TracksResponse> => {
   try {
-    console.log('Making API call to:', `${API_URL}/api/tracks`);
+    console.log('Making API call to tracks endpoint');
+    console.log('Full URL:', `${API_URL}/tracks`);
     console.log('With params:', params);
     
-    const response = await api.get('/api/tracks', { params });
+    const response = await api.get('/tracks', { 
+      params,
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      }
+    });
+    
     console.log('Raw API Response:', response);
     
-    // Check if response has the expected structure
-    if (!response.data || !response.data.data) {
-      console.error('No data in response');
+    if (!response.data) {
       throw new Error('No data in response');
     }
 
@@ -589,27 +663,11 @@ export const getAllTracks = async (params?: {
       ...response.data,
       data: {
         ...response.data.data,
-        tracks: response.data.data.tracks.map(track => {
-          console.log('Processing track:', {
-            title: track.title,
-            coverImage: track.coverImage,
-            audioFile: track.audioFile
-          });
-          
-          const processedTrack = {
-            ...track,
-            coverImage: getMediaUrl(track.coverImage),
-            audioFile: getMediaUrl(track.audioFile)
-          };
-          
-          console.log('Processed track:', {
-            title: processedTrack.title,
-            coverImage: processedTrack.coverImage,
-            audioFile: processedTrack.audioFile
-          });
-          
-          return processedTrack;
-        })
+        tracks: response.data.data.tracks.map(track => ({
+          ...track,
+          coverImage: getMediaUrl(track.coverImage),
+          audioFile: getMediaUrl(track.audioFile)
+        }))
       }
     };
 
@@ -617,32 +675,44 @@ export const getAllTracks = async (params?: {
   } catch (error) {
     console.error('Error fetching tracks:', error);
     if (error.response) {
-      console.error('Error response:', {
+      console.error('Error response details:', {
         status: error.response.status,
         data: error.response.data,
-        headers: error.response.headers
+        headers: error.response.headers,
+        config: {
+          url: error.config.url,
+          baseURL: error.config.baseURL,
+          method: error.config.method,
+          fullUrl: `${error.config.baseURL}${error.config.url}`
+        }
       });
     }
     throw error;
   }
 };
 
-// Get all albums
+// Update getAllAlbums with better error handling
 export const getAllAlbums = async (params?: {
   page?: number;
   limit?: number;
   search?: string;
 }): Promise<AlbumsResponse> => {
   try {
-    console.log('Making API call to:', `${API_URL}/api/albums`);
+    console.log('Making API call to albums endpoint');
+    console.log('Full URL:', `${API_URL}/albums`);
     console.log('With params:', params);
     
-    const response = await api.get('/api/albums', { params });
+    const response = await api.get('/albums', { 
+      params,
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      }
+    });
+    
     console.log('Raw API Response:', response);
     
-    // Check if response has the expected structure
-    if (!response.data || !response.data.data) {
-      console.error('No data in response');
+    if (!response.data) {
       throw new Error('No data in response');
     }
 
@@ -667,10 +737,16 @@ export const getAllAlbums = async (params?: {
   } catch (error) {
     console.error('Error fetching albums:', error);
     if (error.response) {
-      console.error('Error response:', {
+      console.error('Error response details:', {
         status: error.response.status,
         data: error.response.data,
-        headers: error.response.headers
+        headers: error.response.headers,
+        config: {
+          url: error.config.url,
+          baseURL: error.config.baseURL,
+          method: error.config.method,
+          fullUrl: `${error.config.baseURL}${error.config.url}`
+        }
       });
     }
     throw error;

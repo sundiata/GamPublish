@@ -8,12 +8,19 @@ import {
   ActivityIndicator,
   Image,
   Animated,
+  ScrollView,
+  TextInput,
+  StatusBar,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, NavigationProp } from "@react-navigation/native";
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '../context/ThemeContext';
 import { COLORS, SIZES, SHADOWS } from "../constants/theme";
-import { getSurahs, Surah } from "../services/api";
+import { getSurahs, Surah, fetchIslamicDate } from "../services/api";
 import { LinearGradient } from "expo-linear-gradient";
+import Header from '../components/Header';
+import * as Location from "expo-location";
 
 type QuranStackParamList = {
   QuranList: undefined;
@@ -29,19 +36,59 @@ const QuranScreen: React.FC = () => {
   const [surahs, setSurahs] = useState<Surah[]>([]);
   const [loading, setLoading] = useState(true);
   const scrollY = new Animated.Value(0);
+  const { colors, isDarkMode } = useTheme();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredSurahs, setFilteredSurahs] = useState<Surah[]>([]);
+  const [islamicDate, setIslamicDate] = useState('');
+  const [location, setLocation] = useState('Loading location...');
 
   useEffect(() => {
     loadSurahs();
+    loadIslamicDate();
+    loadLocation();
   }, []);
 
   const loadSurahs = async () => {
     try {
       const data = await getSurahs();
       setSurahs(data);
+      setFilteredSurahs(data);
     } catch (error) {
       console.error("Error loading surahs:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadIslamicDate = async () => {
+    try {
+      const hijriDate = await fetchIslamicDate();
+      setIslamicDate(hijriDate.format);
+    } catch (error) {
+      console.error("Error loading Islamic date:", error);
+      setIslamicDate('Loading date...');
+    }
+  };
+
+  const loadLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === "granted") {
+        const position = await Location.getCurrentPositionAsync({});
+        const geocode = await Location.reverseGeocodeAsync({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+
+        if (geocode && geocode[0]) {
+          const { city, country } = geocode[0];
+          const locationName = `${city || "Unknown"}, ${country || "Unknown"}`;
+          setLocation(locationName);
+        }
+      }
+    } catch (error) {
+      console.error("Error getting location:", error);
+      setLocation('Location unavailable');
     }
   };
 
@@ -51,6 +98,17 @@ const QuranScreen: React.FC = () => {
       surahName: surah.englishName,
       totalAyahs: surah.numberOfAyahs,
     });
+  };
+
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    const filtered = surahs.filter(surah => surah.name.toLowerCase().includes(query.toLowerCase()));
+    setFilteredSurahs(filtered);
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    setFilteredSurahs(surahs);
   };
 
   const renderHeader = () => (
@@ -91,7 +149,7 @@ const QuranScreen: React.FC = () => {
           onPress={() => handleSurahPress(item)}
         >
           <View style={styles.surahNumberContainer}>
-            <Text style={styles.surahNumber}>{item.number}</Text>
+            <Text style={styles.numberText}>{item.number}</Text>
           </View>
           <View style={styles.surahInfo}>
             <View>
@@ -121,28 +179,134 @@ const QuranScreen: React.FC = () => {
   }
 
   return (
-    <View style={styles.container}>
-      {renderHeader()}
-      <Animated.FlatList
-        data={surahs}
-        renderItem={renderSurahItem}
-        keyExtractor={(item) => item.number.toString()}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: true }
-        )}
-        scrollEventThrottle={16}
-      />
-    </View>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.primary }]}
+      edges={['top', 'left', 'right']}
+    >
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
+      
+      <View style={{ flex: 1, backgroundColor: colors.primary }}>
+        <Header 
+          islamicDate={islamicDate}
+          location={location}
+          onNotificationPress={() => {
+            // Handle notification press
+            console.log('Notification pressed');
+          }}
+        />
+
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Search Bar */}
+          <View style={[styles.searchContainer, { backgroundColor: 'rgba(0, 0, 0, 0.1)' }]}>
+            <Ionicons name="search" size={20} color={'black'} />
+            <TextInput
+              style={[styles.searchInput, { color: 'black' }]}
+              placeholder="Search Surah"
+              placeholderTextColor={'black'}
+              value={searchQuery}
+              onChangeText={handleSearch}
+            />
+            {searchQuery ? (
+              <TouchableOpacity onPress={clearSearch}>
+                <Ionicons name="close-circle" size={20} color={'black'} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          {/* Surah List */}
+          <View style={styles.surahList}>
+            {filteredSurahs.map((surah) => (
+              <TouchableOpacity
+                key={surah.number}
+                style={[styles.surahItem, { backgroundColor: 'rgba(0, 0, 0, 0.1)' }]}
+                onPress={() => handleSurahPress(surah)}
+              >
+                <View style={styles.surahNumberContainer}>
+                  <Text style={[styles.numberText, { color: 'black' }]}>
+                    {surah.number}
+                  </Text>
+                </View>
+                <View style={styles.surahInfo}>
+                  <Text style={[styles.surahName, { color: 'black' }]}>
+                    {surah.name}
+                  </Text>
+                  <Text style={[styles.surahDetails, { color: 'black' }]}>
+                    {surah.englishName} • {surah.numberOfAyahs} Verses
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color={'black'} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
+      </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: '#FFFFFF',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 16,
+    color: 'black',
+  },
+  surahList: {
+    padding: 16,
+  },
+  surahItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    marginBottom: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  surahNumberContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  numberText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'black',
+  },
+  surahInfo: {
+    flex: 1,
+  },
+  surahName: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 4,
+    color: 'black',
+  },
+  surahDetails: {
+    fontSize: 14,
+    color: 'black',
   },
   header: {
     height: 140,
@@ -192,29 +356,6 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: 'white',
     borderRadius: 16,
-  },
-  surahNumberContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  surahNumber: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.background,
-  },
-  surahInfo: {
-    flex: 1,
-  },
-  surahName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: 4,
   },
   surahTranslation: {
     fontSize: 14,
