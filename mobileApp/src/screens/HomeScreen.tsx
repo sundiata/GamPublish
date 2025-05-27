@@ -30,6 +30,7 @@ import {
 } from "../services/api";
 import * as Location from "expo-location";
 import { PrayerTimes } from "../services/api";
+import Header from '../components/Header';
 const DEFAULT_LATITUDE = 13.4549;
 const DEFAULT_LONGITUDE = -16.579;
 
@@ -385,32 +386,14 @@ export default function HomeScreen({ navigation }) {
       <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
       
       <View style={{ flex: 1, backgroundColor: colors.primary }}>
-        {/* Header with Search */}
-        <View
-          style={[styles.header, { backgroundColor: colors.primary }]}
-        >
-          {/* Top Header Row */}
-          <View style={styles.headerTopRow}>
-            <View>
-              <Text style={[styles.islamicDate, { color: 'black' }]}>
-                {islamicDate}
-              </Text>
-              <Text style={[styles.location, { color: 'black' }]}>
-                {location}
-              </Text>
-            </View>
-           
-          </View>
-           <TouchableOpacity style={styles.notificationButton}>
-              <Ionicons
-                name="notifications-outline"
-                size={40}
-                color={'black'}
-              />
-            </TouchableOpacity>
-
-
-        </View>
+        <Header 
+          islamicDate={islamicDate}
+          location={location}
+          onNotificationPress={() => {
+            // Handle notification press
+            console.log('Notification pressed');
+          }}
+        />
 
         <ScrollView
           style={styles.scrollView}
@@ -536,7 +519,7 @@ export default function HomeScreen({ navigation }) {
               <TouchableOpacity
                 style={[
                   styles.favoriteChip,
-                  { backgroundColor: colors.primaryTransparent },
+                  { backgroundColor: 'rgba(0, 0, 0, 0.1)' },
                 ]}
                 onPress={() =>
                   navigation.navigate("SurahDetailScreen", {
@@ -546,7 +529,7 @@ export default function HomeScreen({ navigation }) {
                 }
               >
                 <Text
-                  style={[styles.favoriteChipText, { color: colors.primary }]}
+                  style={[styles.favoriteChipText, { color: 'black' }]}
                 >
                   67. Al-Mulk
                 </Text>
@@ -554,7 +537,7 @@ export default function HomeScreen({ navigation }) {
               <TouchableOpacity
                 style={[
                   styles.favoriteChip,
-                  { backgroundColor: colors.primaryTransparent },
+                  { backgroundColor: 'rgba(0, 0, 0, 0.1)' },
                 ]}
                 onPress={() =>
                   navigation.navigate("SurahDetailScreen", {
@@ -564,7 +547,7 @@ export default function HomeScreen({ navigation }) {
                 }
               >
                 <Text
-                  style={[styles.favoriteChipText, { color: colors.primary }]}
+                  style={[styles.favoriteChipText, { color: 'black' }]}
                 >
                   2. Al-Baqarah
                 </Text>
@@ -572,7 +555,7 @@ export default function HomeScreen({ navigation }) {
               <TouchableOpacity
                 style={[
                   styles.favoriteChip,
-                  { backgroundColor: colors.primaryTransparent },
+                  { backgroundColor: 'rgba(0, 0, 0, 0.1)' },
                 ]}
                 onPress={() =>
                   navigation.navigate("SurahDetailScreen", {
@@ -582,7 +565,7 @@ export default function HomeScreen({ navigation }) {
                 }
               >
                 <Text
-                  style={[styles.favoriteChipText, { color: colors.primary }]}
+                  style={[styles.favoriteChipText, { color: 'black' }]}
                 >
                   19. Maryam
                 </Text>
@@ -603,7 +586,7 @@ export default function HomeScreen({ navigation }) {
             <TouchableOpacity
               style={[
                 styles.continueListeningCard,
-                { backgroundColor: 'rgba(35, 42, 42, 0.72)' },
+                { backgroundColor: 'rgba(0, 0, 0, 0.1)' },
   
 
               ]}
@@ -628,14 +611,14 @@ export default function HomeScreen({ navigation }) {
               />
               <View style={styles.continueListeningInfo}>
                 <Text
-                  style={[styles.continueListeningTitle, { color: 'white' }]}
+                  style={[styles.continueListeningTitle, { color: 'black' }]}
                 >
                   2. Al-Baqarah
                 </Text>
                 <Text
                   style={[
                     styles.continueListeningSubtitle,
-                    { color: colors.textSecondary },
+                    { color: 'black' },
                   ]}
                 >
                   The Cow
@@ -645,12 +628,12 @@ export default function HomeScreen({ navigation }) {
                     <View
                       style={[
                         styles.progressFill,
-                        { width: `${progress}%`, backgroundColor: 'white' },
+                        { width: `${progress}%`, backgroundColor: 'black' },
                       ]}
                     />
                   </View>
                   <Text
-                    style={[styles.progressText, { color: 'white' }]}
+                    style={[styles.progressText, { color: 'black' }]}
                   >
                     {countdown}
                   </Text>
@@ -662,7 +645,7 @@ export default function HomeScreen({ navigation }) {
                   { backgroundColor: colors.secondaryTransparent },
                 ]}
               >
-                <Ionicons name="play" size={24} color={colors.primary} />
+                <Ionicons name="play" size={24} color={'black'} />
               </TouchableOpacity>
             </TouchableOpacity>
           </View>
@@ -797,40 +780,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#000000',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-  },
-  headerTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    bottom: 45,
-    
-  },
-  islamicDate: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: 'red',
-  },
-  location: {
-    fontSize: 14,
-    opacity: 0.8,
-    color: '#000000',
-  },
-  notificationButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    // backgroundColor: "rgba(0, 0, 0, 0.1)",
-    justifyContent: "center",
-    alignItems: "center",
-    bottom: 45,
-  },
   scrollView: {
     flex: 1,
   },
@@ -885,7 +834,6 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#000000',
   },
-  // Favorites Section
   favoritesSection: {
     padding: 16,
     backgroundColor: '#FFFFFF',
@@ -912,7 +860,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: '#000000',
   },
-  // Continue Listening Section
   continueListeningSection: {
     padding: 16,
     backgroundColor: '#FFFFFF',
@@ -979,7 +926,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: 'rgba(0, 0, 0, 0.1)',
   },
-  // Features Section
   featuresSection: {
     padding: 16,
     backgroundColor: '#FFFFFF',
@@ -1008,7 +954,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: '#000000',
   },
-  // Daily Prayers Section - Enhanced
   dailyPrayersSection: {
     padding: 16,
     backgroundColor: '#FFFFFF',

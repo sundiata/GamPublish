@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Dimensions,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -17,6 +18,10 @@ import { getSurah } from '../services/api';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RootStackScreenProps } from '../types/navigation';
+import { useTheme } from '../context/ThemeContext';
+import Header from '../components/Header';
+import * as Location from "expo-location";
+import { fetchIslamicDate } from "../services/api";
 
 const { width } = Dimensions.get('window');
 
@@ -32,9 +37,15 @@ const SurahDetailScreen = () => {
   const { surahNumber, surahName, totalAyahs } = route.params;
   const [verses, setVerses] = useState<Verse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedVerses, setExpandedVerses] = useState<Set<number>>(new Set());
+  const { colors, isDarkMode } = useTheme();
+  const [islamicDate, setIslamicDate] = useState('');
+  const [location, setLocation] = useState('Loading location...');
 
   useEffect(() => {
     loadSurahDetails();
+    loadIslamicDate();
+    loadLocation();
   }, []);
 
   const loadSurahDetails = async () => {
@@ -57,44 +68,87 @@ const SurahDetailScreen = () => {
     }
   };
 
-  const renderHeader = () => (
-    <View style={styles.header}>
-      <LinearGradient
-        colors={[COLORS.primary, COLORS.secondary]}
-        style={styles.headerGradient}
-      >
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color={COLORS.background} />
-        </TouchableOpacity>
-        <View style={styles.headerContent}>
-          <Text style={styles.surahName}>{surahName}</Text>
-          <Text style={styles.verseCount}>{totalAyahs} Verses</Text>
-        </View>
-      </LinearGradient>
-    </View>
-  );
+  const loadIslamicDate = async () => {
+    try {
+      const hijriDate = await fetchIslamicDate();
+      setIslamicDate(hijriDate.format);
+    } catch (error) {
+      console.error("Error loading Islamic date:", error);
+      setIslamicDate('Loading date...');
+    }
+  };
+
+  const loadLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === "granted") {
+        const position = await Location.getCurrentPositionAsync({});
+        const geocode = await Location.reverseGeocodeAsync({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+
+        if (geocode && geocode[0]) {
+          const { city, country } = geocode[0];
+          const locationName = `${city || "Unknown"}, ${country || "Unknown"}`;
+          setLocation(locationName);
+        }
+      }
+    } catch (error) {
+      console.error("Error getting location:", error);
+      setLocation('Location unavailable');
+    }
+  };
+
+  const toggleVerseTranslation = (verseNumber: number) => {
+    setExpandedVerses(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(verseNumber)) {
+        newSet.delete(verseNumber);
+      } else {
+        newSet.add(verseNumber);
+      }
+      return newSet;
+    });
+  };
 
   const renderVerse = ({ item }: { item: Verse }) => (
-    <View style={styles.verseCard}>
-      <View style={styles.verseNumberContainer}>
-        <Text style={styles.verseNumber}>{item.number}</Text>
+    <View style={styles.verseContainer}>
+      <View style={styles.verseHeader}>
+        <View style={styles.verseNumber}>
+          <Text style={styles.numberText}>{item.number}</Text>
+        </View>
+        <TouchableOpacity
+          style={[styles.translationToggle, { backgroundColor: 'rgba(0, 0, 0, 0.1)' }]}
+          onPress={() => toggleVerseTranslation(item.number)}
+        >
+          <Ionicons 
+            name={expandedVerses.has(item.number) ? "eye-off-outline" : "eye-outline"} 
+            size={20} 
+            color={'black'} 
+          />
+          <Text style={[styles.toggleText, { color: 'black' }]}>
+            {expandedVerses.has(item.number) ? 'Hide Translation' : 'Show Translation'}
+          </Text>
+        </TouchableOpacity>
       </View>
       <View style={styles.verseContent}>
         <Text style={styles.arabicText}>{item.text}</Text>
-        <Text style={styles.translationText}>{item.translation}</Text>
+        {expandedVerses.has(item.number) && (
+          <View style={styles.translationContainer}>
+            <Text style={styles.translationText}>{item.translation}</Text>
+          </View>
+        )}
       </View>
       <View style={styles.verseActions}>
-        <TouchableOpacity style={styles.actionButton}>
-          <Ionicons name="play" size={20} color={COLORS.primary} />
+        <TouchableOpacity style={[styles.actionButton, { backgroundColor: 'rgba(0, 0, 0, 0.1)' }]}>
+          <Ionicons name="play" size={20} color={'black'} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionButton}>
-          <Ionicons name="bookmark-outline" size={20} color={COLORS.primary} />
+        <TouchableOpacity style={[styles.actionButton, { backgroundColor: 'rgba(0, 0, 0, 0.1)' }]}>
+          <Ionicons name="bookmark-outline" size={20} color={'black'} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionButton}>
-          <Ionicons name="share-outline" size={20} color={COLORS.primary} />
+        <TouchableOpacity style={[styles.actionButton, { backgroundColor: 'rgba(0, 0, 0, 0.1)' }]}>
+          <Ionicons name="share-outline" size={20} color={'black'} />
         </TouchableOpacity>
       </View>
     </View>
@@ -102,23 +156,52 @@ const SurahDetailScreen = () => {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading Surah...</Text>
-      </View>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.primary }]}>
+        <ActivityIndicator size="large" color={colors.text} />
+      </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {renderHeader()}
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-      >
-        {verses.map((verse) => renderVerse({ item: verse }))}
-      </ScrollView>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.primary }]}
+      edges={['top', 'left', 'right']}
+    >
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
+      
+      <View style={{ flex: 1, backgroundColor: colors.primary }}>
+        <Header 
+          islamicDate={islamicDate}
+          location={location}
+          onNotificationPress={() => {
+            console.log('Notification pressed');
+          }}
+          showBackButton={true}
+        />
+
+        
+
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.listContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.header}>
+           
+            <View style={styles.surahInfo}>
+              <Text style={[styles.surahName, { color: 'black' }]}>{surahName}</Text>
+              <Text style={[styles.verseCount, { color: 'black' }]}>{totalAyahs} Verses</Text>
+            </View>
+          </View>
+
+
+          {verses.map((verse) => (
+            <View key={verse.number}>
+              {renderVerse({ item: verse })}
+            </View>
+          ))}
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 };
@@ -126,110 +209,122 @@ const SurahDetailScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: '#FFFFFF',
+  },
+  scrollView: {
+    flex: 1,
+    bottom: 45,
+  },
+  listContainer: {
+    padding: 16,
   },
   header: {
-    height: 160,
-    width: '100%',
-    marginTop: -60,
-  },
-  headerGradient: {
-    flex: 1,
-    justifyContent: 'center',
+    padding: 20,
     alignItems: 'center',
-    paddingTop: 80,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    position: 'relative',
   },
   backButton: {
     position: 'absolute',
-    top: 60,
-    left: 16,
+    left: 20,
+    top: '50%',
+    transform: [{ translateY: -12 }],
     padding: 8,
   },
-  headerContent: {
+  surahInfo: {
     alignItems: 'center',
-    paddingHorizontal: 20,
   },
   surahName: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: COLORS.background,
     marginBottom: 8,
+    color: 'black',
   },
   verseCount: {
     fontSize: 16,
-    color: COLORS.background,
-    opacity: 0.8,
+    opacity: 0.7,
+    color: 'black',
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  verseHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: COLORS.text,
-  },
-  scrollView: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  listContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 20,
-    paddingTop: 16,
-  },
-  verseCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
     marginBottom: 16,
-    ...SHADOWS.medium,
-  },
-  verseNumberContainer: {
-    position: 'absolute',
-    top: -12,
-    left: 16,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1,
   },
   verseNumber: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: COLORS.background,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  numberText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'black',
+  },
+  translationToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  toggleText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
+    color: 'black',
+  },
+  verseContainer: {
+    padding: 20,
+    marginBottom: 16,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
   },
   verseContent: {
-    padding: 16,
-    paddingTop: 24,
+    flex: 1,
   },
   arabicText: {
-    fontSize: 24,
-    color: COLORS.text,
+    fontSize: 26,
+    lineHeight: 45,
+    marginBottom: 16,
+    color: 'black',
     textAlign: 'right',
-    marginBottom: 12,
     fontFamily: 'Amiri-Regular',
-    lineHeight: 40,
+  },
+  translationContainer: {
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
   },
   translationText: {
     fontSize: 16,
-    color: COLORS.textSecondary,
-    lineHeight: 24,
+    lineHeight: 26,
+    color: 'black',
+    opacity: 0.8,
   },
   verseActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    padding: 12,
+    marginTop: 16,
+    paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: `${COLORS.textSecondary}15`,
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
   },
   actionButton: {
-    padding: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginLeft: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
   },
 });
 

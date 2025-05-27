@@ -1,9 +1,13 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, Dimensions } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, Dimensions, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants/theme';
 import { useNavigation } from '@react-navigation/native';
+import { useTheme } from '../context/ThemeContext';
+import Header from '../components/Header';
+import * as Location from "expo-location";
+import { fetchIslamicDate } from "../services/api";
 
 const { width } = Dimensions.get('window');
 
@@ -53,8 +57,48 @@ const islamicEvents = [
 
 const IslamicEventsScreen = () => {
   const navigation = useNavigation();
+  const { colors, isDarkMode } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredEvents, setFilteredEvents] = useState(islamicEvents);
+  const [islamicDate, setIslamicDate] = useState('');
+  const [location, setLocation] = useState('Loading location...');
+
+  useEffect(() => {
+    loadIslamicDate();
+    loadLocation();
+  }, []);
+
+  const loadIslamicDate = async () => {
+    try {
+      const hijriDate = await fetchIslamicDate();
+      setIslamicDate(hijriDate.format);
+    } catch (error) {
+      console.error("Error loading Islamic date:", error);
+      setIslamicDate('Loading date...');
+    }
+  };
+
+  const loadLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === "granted") {
+        const position = await Location.getCurrentPositionAsync({});
+        const geocode = await Location.reverseGeocodeAsync({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+
+        if (geocode && geocode[0]) {
+          const { city, country } = geocode[0];
+          const locationName = `${city || "Unknown"}, ${country || "Unknown"}`;
+          setLocation(locationName);
+        }
+      }
+    } catch (error) {
+      console.error("Error getting location:", error);
+      setLocation('Location unavailable');
+    }
+  };
 
   const handleSearch = (text) => {
     setSearchQuery(text);
@@ -86,76 +130,84 @@ const IslamicEventsScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Islamic Events</Text>
-        <TouchableOpacity style={styles.calendarButton}>
-          <Ionicons name="calendar-outline" size={24} color={COLORS.background} />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color={COLORS.textSecondary} style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search events..."
-          placeholderTextColor={COLORS.textSecondary}
-          value={searchQuery}
-          onChangeText={handleSearch}
+    <SafeAreaView 
+      style={[styles.container, { backgroundColor: colors.primary }]}
+      edges={['top', 'left', 'right']}
+    >
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
+      
+      <View style={{ flex: 1, backgroundColor: colors.primary }}>
+        <Header 
+          islamicDate={islamicDate}
+          location={location}
+          onNotificationPress={() => {
+            console.log('Notification pressed');
+          }}
         />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity 
-            style={styles.clearButton}
-            onPress={() => {
-              setSearchQuery('');
-              setFilteredEvents(islamicEvents);
-            }}
-          >
-            <Ionicons name="close-circle" size={20} color={COLORS.textSecondary} />
-          </TouchableOpacity>
-        )}
-      </View>
 
-      <ScrollView 
-        style={styles.eventsList}
-        showsVerticalScrollIndicator={false}
-      >
-        {filteredEvents.map((event) => (
-          <View key={event.id} style={styles.eventCard}>
-            <Image 
-              source={event.image} 
-              style={styles.eventImage}
-            />
-            <View style={styles.eventContent}>
-              <View style={styles.eventHeader}>
-                <View>
-                  <Text style={styles.eventName}>{event.name}</Text>
-                  <Text style={styles.eventDate}>{event.date}</Text>
-                  <Text style={styles.hijriDate}>{event.hijriDate}</Text>
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color={'black'} style={styles.searchIcon} />
+          <TextInput
+            style={[styles.searchInput, { color: 'black' }]}
+            placeholder="Search events..."
+            placeholderTextColor={'black'}
+            value={searchQuery}
+            onChangeText={handleSearch}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity 
+              style={styles.clearButton}
+              onPress={() => {
+                setSearchQuery('');
+                setFilteredEvents(islamicEvents);
+              }}
+            >
+              <Ionicons name="close-circle" size={20} color={'black'} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <ScrollView 
+          style={styles.eventsList}
+          showsVerticalScrollIndicator={false}
+        >
+          {filteredEvents.map((event) => (
+            <View key={event.id} style={[styles.eventCard, { backgroundColor: 'rgba(0, 0, 0, 0.1)' }]}>
+              <Image 
+                source={event.image} 
+                style={styles.eventImage}
+              />
+              <View style={styles.eventContent}>
+                <View style={styles.eventHeader}>
+                  <View>
+                    <Text style={[styles.eventName, { color: 'black' }]}>{event.name}</Text>
+                    <Text style={[styles.eventDate, { color: 'black' }]}>{event.date}</Text>
+                    <Text style={[styles.hijriDate, { color: 'black' }]}>{event.hijriDate}</Text>
+                  </View>
+                  <View style={styles.daysContainer}>
+                    <Text style={[styles.daysNumber, { color: 'black' }]}>{event.daysUntil}</Text>
+                    <Text style={[styles.daysText, { color: 'black' }]}>days left</Text>
+                  </View>
                 </View>
-                <View style={styles.daysContainer}>
-                  <Text style={styles.daysNumber}>{event.daysUntil}</Text>
-                  <Text style={styles.daysText}>days left</Text>
+                <Text style={[styles.eventDescription, { color: 'black' }]}>{event.description}</Text>
+                <View style={styles.eventFooter}>
+                  <TouchableOpacity style={[styles.reminderButton, { backgroundColor: 'rgba(0, 0, 0, 0.1)' }]}>
+                    <Ionicons name="notifications-outline" size={20} color={'black'} />
+                    <Text style={[styles.reminderText, { color: 'black' }]}>Remind me</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.bookingButton, { backgroundColor: 'rgba(0, 0, 0, 0.1)' }]}
+                    onPress={() => handleBooking(event)}
+                  >
+                    <Ionicons name="calendar-outline" size={20} color={'black'} />
+                    <Text style={[styles.bookingText, { color: 'black' }]}>Book Seat</Text>
+                  </TouchableOpacity>
                 </View>
-              </View>
-              <Text style={styles.eventDescription}>{event.description}</Text>
-              <View style={styles.eventFooter}>
-                <TouchableOpacity style={styles.reminderButton}>
-                  <Ionicons name="notifications-outline" size={20} color={COLORS.primary} />
-                  <Text style={styles.reminderText}>Remind me</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.bookingButton}
-                  onPress={() => handleBooking(event)}
-                >
-                  <Ionicons name="calendar-outline" size={20} color={COLORS.background} />
-                  <Text style={styles.bookingText}>Book Seat</Text>
-                </TouchableOpacity>
               </View>
             </View>
-          </View>
-        ))}
-      </ScrollView>
+          ))}
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 };
@@ -163,32 +215,12 @@ const IslamicEventsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.primary,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: COLORS.background,
-  },
-  calendarButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
     marginHorizontal: 20,
     marginVertical: 10,
     paddingHorizontal: 15,
@@ -201,28 +233,17 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: COLORS.text,
   },
   clearButton: {
     padding: 5,
   },
   eventsList: {
     flex: 1,
-    backgroundColor: COLORS.background,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    paddingTop: 20,
     paddingHorizontal: 16,
   },
   eventCard: {
-    backgroundColor: 'white',
     borderRadius: 15,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
     overflow: 'hidden',
   },
   eventImage: {
@@ -241,37 +262,30 @@ const styles = StyleSheet.create({
   eventName: {
     fontSize: 18,
     fontWeight: '600',
-    color: COLORS.text,
     marginBottom: 4,
   },
   eventDate: {
     fontSize: 14,
-    color: COLORS.textSecondary,
     marginBottom: 2,
   },
   hijriDate: {
     fontSize: 14,
-    color: COLORS.textSecondary,
     fontStyle: 'italic',
   },
   daysContainer: {
     alignItems: 'center',
-    backgroundColor: `${COLORS.primary}15`,
     padding: 8,
     borderRadius: 10,
   },
   daysNumber: {
     fontSize: 20,
     fontWeight: '700',
-    color: COLORS.primary,
   },
   daysText: {
     fontSize: 12,
-    color: COLORS.primary,
   },
   eventDescription: {
     fontSize: 14,
-    color: COLORS.textSecondary,
     marginBottom: 16,
   },
   eventFooter: {
@@ -282,27 +296,23 @@ const styles = StyleSheet.create({
   reminderButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: `${COLORS.primary}10`,
     padding: 8,
     borderRadius: 8,
   },
   reminderText: {
     marginLeft: 6,
     fontSize: 14,
-    color: COLORS.primary,
     fontWeight: '500',
   },
   bookingButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.primary,
     padding: 8,
     borderRadius: 8,
   },
   bookingText: {
     marginLeft: 6,
     fontSize: 14,
-    color: COLORS.background,
     fontWeight: '500',
   },
 });
