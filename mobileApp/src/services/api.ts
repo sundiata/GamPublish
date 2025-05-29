@@ -272,112 +272,112 @@ export const getQuranAudio = async (edition: string = "ar.alafasy") => {
 };
 
 // Prayer API Functions
-export const getAllPrayers = async (params?: {
-  page?: number;
-  limit?: number;
-  status?: string;
-  category?: string;
-  search?: string;
-}): Promise<{ prayers: Prayer[]; total: number; totalPages: number; currentPage: number }> => {
-  try {
-    console.log('=== Prayer API Request ===');
-    console.log('URL:', `${API_URL}/prayers`);
-    console.log('Params:', params);
-    console.log('Headers:', {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json'
-    });
+// export const getAllPrayers = async (params?: {
+//   page?: number;
+//   limit?: number;
+//   status?: string;
+//   category?: string;
+//   search?: string;
+// }): Promise<{ prayers: Prayer[]; total: number; totalPages: number; currentPage: number }> => {
+//   try {
+//     console.log('=== Prayer API Request ===');
+//     console.log('URL:', `${API_URL}/prayers`);
+//     console.log('Params:', params);
+//     console.log('Headers:', {
+//       'Accept': 'application/json',
+//       'Content-Type': 'application/json'
+//     });
 
-    const response = await api.get<{
-      status: string;
-      data: {
-        prayers: Prayer[];
-        total: number;
-        totalPages: number;
-        currentPage: number;
-      }
-    }>('/prayers', { 
-      params,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      }
-    });
+//     const response = await api.get<{
+//       status: string;
+//       data: {
+//         prayers: Prayer[];
+//         total: number;
+//         totalPages: number;
+//         currentPage: number;
+//       }
+//     }>('/prayers', { 
+//       params,
+//       headers: {
+//         'Accept': 'application/json',
+//         'Content-Type': 'application/json'
+//       }
+//     });
     
-    console.log('=== Prayer API Response ===');
-    console.log('Status:', response.status);
-    console.log('Headers:', response.headers);
-    console.log('Data:', JSON.stringify(response.data, null, 2));
+//     console.log('=== Prayer API Response ===');
+//     console.log('Status:', response.status);
+//     console.log('Headers:', response.headers);
+//     console.log('Data:', JSON.stringify(response.data, null, 2));
     
-    if (!response.data || response.data.status !== 'success') {
-      throw new Error('Invalid response from prayers API');
-    }
+//     if (!response.data || response.data.status !== 'success') {
+//       throw new Error('Invalid response from prayers API');
+//     }
 
-    return response.data.data;
-  } catch (error) {
-    console.error('=== Prayer API Error ===');
-    console.error('Error:', error.message);
-    if (error.response) {
-      console.error('Error Response:', {
-        status: error.response.status,
-        data: error.response.data,
-        headers: error.response.headers,
-        config: {
-          url: error.config.url,
-          baseURL: error.config.baseURL,
-          method: error.config.method,
-          fullUrl: `${error.config.baseURL}${error.config.url}`
-        }
-      });
-    }
-    throw error;
-  }
-};
+//     return response.data.data;
+//   } catch (error) {
+//     console.error('=== Prayer API Error ===');
+//     console.error('Error:', error.message);
+//     if (error.response) {
+//       console.error('Error Response:', {
+//         status: error.response.status,
+//         data: error.response.data,
+//         headers: error.response.headers,
+//         config: {
+//           url: error.config.url,
+//           baseURL: error.config.baseURL,
+//           method: error.config.method,
+//           fullUrl: `${error.config.baseURL}${error.config.url}`
+//         }
+//       });
+//     }
+//     throw error;
+//   }
+// };
 
-// Function to fetch prayer times
-export const getPrayerTimes = async (): Promise<PrayerTimes> => {
-  try {
-    console.log('Fetching prayer times...');
-    const response = await api.get<{ status: string; data: PrayerTimes }>('/prayer-times/times', {
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      }
-    });
+// // Function to fetch prayer times
+// export const getPrayerTimes = async (): Promise<PrayerTimes> => {
+//   try {
+//     console.log('Fetching prayer times...');
+//     const response = await api.get<{ status: string; data: PrayerTimes }>('/prayer-times/times', {
+//       headers: {
+//         'Accept': 'application/json',
+//         'Content-Type': 'application/json'
+//       }
+//     });
     
-    console.log('Prayer times response:', response.data);
+//     console.log('Prayer times response:', response.data);
     
-    if (!response.data || response.data.status !== 'success') {
-      throw new Error('Invalid response from prayer times API');
-    }
+//     if (!response.data || response.data.status !== 'success') {
+//       throw new Error('Invalid response from prayer times API');
+//     }
     
-    return response.data.data;
-  } catch (error) {
-    console.error('Error fetching prayer times:', error);
-    if (error.response) {
-      console.error('Error response details:', {
-        status: error.response.status,
-        data: error.response.data,
-        headers: error.response.headers,
-        config: {
-          url: error.config.url,
-          baseURL: error.config.baseURL,
-          method: error.config.method,
-          fullUrl: `${error.config.baseURL}${error.config.url}`
-        }
-      });
-    }
-    // Return default prayer times if API fails
-    return {
-      fajr: "05:15",
-      sunrise: "06:45",
-      dhuhr: "12:30",
-      asr: "15:45",
-      maghrib: "18:15",
-      isha: "19:45"
-    };
-  }
-};
+//     return response.data.data;
+//   } catch (error) {
+//     console.error('Error fetching prayer times:', error);
+//     if (error.response) {
+//       console.error('Error response details:', {
+//         status: error.response.status,
+//         data: error.response.data,
+//         headers: error.response.headers,
+//         config: {
+//           url: error.config.url,
+//           baseURL: error.config.baseURL,
+//           method: error.config.method,
+//           fullUrl: `${error.config.baseURL}${error.config.url}`
+//         }
+//       });
+//     }
+//     // Return default prayer times if API fails
+//     return {
+//       fajr: "05:15",
+//       sunrise: "06:45",
+//       dhuhr: "12:30",
+//       asr: "15:45",
+//       maghrib: "18:15",
+//       isha: "19:45"
+//     };
+//   }
+// };
 
 export const getQuranChapters = async () => {
   try {
@@ -634,57 +634,60 @@ export const getMediaUrl = (path: string) => {
 };
 
 // Update getAllTracks with better error handling
-export const getAllTracks = async (params?: {
-  page?: number;
-  limit?: number;
-  search?: string;
-}): Promise<TracksResponse> => {
+export const getAllTracks = async (): Promise<TracksResponse> => {
   try {
-    console.log('Making API call to tracks endpoint');
-    console.log('Full URL:', `${API_URL}/tracks`);
-    console.log('With params:', params);
+    console.log('=== Audio Tracks API Request ===');
+    console.log('URL:', `${API_URL}/tracks`);
     
-    const response = await api.get('/tracks', { 
-      params,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      }
-    });
+    const response = await api.get<TracksResponse>('/tracks');
     
-    console.log('Raw API Response:', response);
+    console.log('=== Audio Tracks API Response ===');
+    console.log('Status:', response.status);
+    console.log('Data:', JSON.stringify(response.data, null, 2));
     
-    if (!response.data) {
-      throw new Error('No data in response');
+    if (!response.data || response.data.status !== 'success') {
+      throw new Error('Invalid response from tracks API');
     }
 
-    // Process the tracks to ensure proper URLs
-    const processedData = {
-      ...response.data,
-      data: {
-        ...response.data.data,
-        tracks: response.data.data.tracks.map(track => ({
-          ...track,
-          coverImage: getMediaUrl(track.coverImage),
-          audioFile: getMediaUrl(track.audioFile)
-        }))
-      }
-    };
-
-    return processedData;
+    return response.data;
   } catch (error) {
-    console.error('Error fetching tracks:', error);
+    console.error('=== Audio Tracks API Error ===');
+    console.error('Error:', error.message);
     if (error.response) {
-      console.error('Error response details:', {
+      console.error('Error Response:', {
         status: error.response.status,
         data: error.response.data,
-        headers: error.response.headers,
-        config: {
-          url: error.config.url,
-          baseURL: error.config.baseURL,
-          method: error.config.method,
-          fullUrl: `${error.config.baseURL}${error.config.url}`
-        }
+        headers: error.response.headers
+      });
+    }
+    throw error;
+  }
+};
+
+export const getTrack = async (id: string): Promise<{ status: string; data: { track: Track } }> => {
+  try {
+    console.log('=== Single Track API Request ===');
+    console.log('URL:', `${API_URL}/tracks/${id}`);
+    
+    const response = await api.get<{ status: string; data: { track: Track } }>(`/tracks/${id}`);
+    
+    console.log('=== Single Track API Response ===');
+    console.log('Status:', response.status);
+    console.log('Data:', JSON.stringify(response.data, null, 2));
+    
+    if (!response.data || response.data.status !== 'success') {
+      throw new Error('Invalid response from track API');
+    }
+
+    return response.data;
+  } catch (error) {
+    console.error('=== Single Track API Error ===');
+    console.error('Error:', error.message);
+    if (error.response) {
+      console.error('Error Response:', {
+        status: error.response.status,
+        data: error.response.data,
+        headers: error.response.headers
       });
     }
     throw error;
@@ -692,61 +695,108 @@ export const getAllTracks = async (params?: {
 };
 
 // Update getAllAlbums with better error handling
-export const getAllAlbums = async (params?: {
-  page?: number;
-  limit?: number;
-  search?: string;
-}): Promise<AlbumsResponse> => {
+export const getAllAlbums = async (): Promise<AlbumsResponse> => {
   try {
-    console.log('Making API call to albums endpoint');
-    console.log('Full URL:', `${API_URL}/albums`);
-    console.log('With params:', params);
+    console.log('=== Albums API Request ===');
+    console.log('URL:', `${API_URL}/albums`);
     
-    const response = await api.get('/albums', { 
-      params,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      }
-    });
+    const response = await api.get<AlbumsResponse>('/albums');
     
-    console.log('Raw API Response:', response);
+    console.log('=== Albums API Response ===');
+    console.log('Status:', response.status);
+    console.log('Data:', JSON.stringify(response.data, null, 2));
     
-    if (!response.data) {
-      throw new Error('No data in response');
+    if (!response.data || response.data.status !== 'success') {
+      throw new Error('Invalid response from albums API');
     }
 
-    // Process the albums to ensure proper URLs
-    const processedData = {
-      ...response.data,
-      data: {
-        ...response.data.data,
-        albums: response.data.data.albums.map(album => ({
-          ...album,
-          coverImage: getMediaUrl(album.coverImage),
-          tracks: album.tracks.map(track => ({
-            ...track,
-            coverImage: getMediaUrl(track.coverImage),
-            audioFile: getMediaUrl(track.audioFile)
-          }))
-        }))
-      }
-    };
-
-    return processedData;
+    return response.data;
   } catch (error) {
-    console.error('Error fetching albums:', error);
+    console.error('=== Albums API Error ===');
+    console.error('Error:', error.message);
     if (error.response) {
-      console.error('Error response details:', {
+      console.error('Error Response:', {
         status: error.response.status,
         data: error.response.data,
-        headers: error.response.headers,
-        config: {
-          url: error.config.url,
-          baseURL: error.config.baseURL,
-          method: error.config.method,
-          fullUrl: `${error.config.baseURL}${error.config.url}`
-        }
+        headers: error.response.headers
+      });
+    }
+    throw error;
+  }
+};
+
+// Events API Functions
+export const getAllEvents = async (): Promise<Event[]> => {
+  try {
+    console.log('=== Events API Request ===');
+    console.log('URL:', `${API_URL}/events`);
+    
+    const response = await api.get<{
+      status: string;
+      data: {
+        events: Event[];
+        total: number;
+        totalPages: number;
+        currentPage: number;
+      }
+    }>('/events');
+    
+    console.log('=== Events API Response ===');
+    console.log('Status:', response.status);
+    console.log('Data:', JSON.stringify(response.data, null, 2));
+    
+    if (!response.data || response.data.status !== 'success') {
+      throw new Error('Invalid response from events API');
+    }
+
+    return response.data.data.events;
+  } catch (error) {
+    console.error('=== Events API Error ===');
+    console.error('Error:', error.message);
+    if (error.response) {
+      console.error('Error Response:', {
+        status: error.response.status,
+        data: error.response.data,
+        headers: error.response.headers
+      });
+    }
+    throw error;
+  }
+};
+
+// Notifications API Functions
+export const getAllNotifications = async (): Promise<Notification[]> => {
+  try {
+    console.log('=== Notifications API Request ===');
+    console.log('URL:', `${API_URL}/notifications`);
+    
+    const response = await api.get<{
+      status: string;
+      data: {
+        notifications: Notification[];
+        total: number;
+        totalPages: number;
+        currentPage: number;
+      }
+    }>('/notifications');
+    
+    console.log('=== Notifications API Response ===');
+    console.log('Status:', response.status);
+    console.log('Data:', JSON.stringify(response.data, null, 2));
+    
+    if (!response.data || response.data.status !== 'success') {
+      throw new Error('Invalid response from notifications API');
+    }
+
+    return response.data.data.notifications;
+  } catch (error) {
+    console.error('=== Notifications API Error ===');
+    console.error('Error:', error.message);
+    if (error.response) {
+      console.error('Error Response:', {
+        status: error.response.status,
+        data: error.response.data,
+        headers: error.response.headers
       });
     }
     throw error;

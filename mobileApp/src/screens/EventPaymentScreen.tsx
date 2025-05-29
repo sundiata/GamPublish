@@ -148,7 +148,7 @@ const EventPaymentScreen = () => {
               >
                 <Ionicons name="phone-portrait" size={24} color={'black'} />
                 <Text style={[styles.paymentMethodText, { color: 'black' }]}>
-                  Mobile Money
+                  Modem Pay
                 </Text>
               </TouchableOpacity>
             </View>

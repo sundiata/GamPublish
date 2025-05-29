@@ -60,17 +60,21 @@ const prayerService = {
   }): Promise<PrayersResponse['data']> => {
     try {
       console.log('Fetching prayers with params:', params);
-      const response = await api.get<Prayer[]>('/prayers', { params });
-      // console.log('Raw prayers response:', response);
-      // console.log('Response data:', response.data);
+      const response = await api.get<PrayersResponse>('/prayers', { params });
+      console.log('Raw prayers response:', response);
       
-      // The backend returns an array of prayers directly
-      return {
-        prayers: response.data,
-        total: response.data.length,
-        totalPages: 1,
-        currentPage: 1
-      };
+      // Check if response has the expected structure
+      if (response.data && response.data.data && Array.isArray(response.data.data.prayers)) {
+        return response.data.data;
+      } else {
+        // If response is just an array, wrap it in the expected structure
+        return {
+          prayers: Array.isArray(response.data) ? response.data : [],
+          total: Array.isArray(response.data) ? response.data.length : 0,
+          totalPages: 1,
+          currentPage: 1
+        };
+      }
     } catch (error) {
       console.error('Error fetching prayers:', error);
       throw error;

@@ -64,13 +64,16 @@ const Prayers: React.FC = () => {
     try {
       setLoading(true);
       const response = await prayerService.getAllPrayers();
+      console.log('Prayers response:', response);
+      
       // Sort prayers based on category order
       const sortedPrayers = response.prayers.sort((a, b) => {
         const indexA = categories.indexOf(a.category);
         const indexB = categories.indexOf(b.category);
         return indexA - indexB;
       });
-      setPrayers(sortedPrayers || []);
+      
+      setPrayers(sortedPrayers);
       setError(null);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load prayers';

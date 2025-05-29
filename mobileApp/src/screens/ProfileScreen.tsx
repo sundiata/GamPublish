@@ -66,8 +66,8 @@ const ProfileScreen = () => {
   };
 
   const user = {
-    name: 'John Doe',
-    email: 'john.doe@example.com',
+    name: 'Sundiata Keita',
+    email: 'keitajato@example.com',
     profileImage: 'https://via.placeholder.com/150',
     stats: {
       prayersCompleted: 156,

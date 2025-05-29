@@ -43,7 +43,7 @@ app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/prayers', prayerRoutes);
-app.use('/api/prayers', prayerTimeRoutes);
+app.use('/api/prayer-times', prayerTimeRoutes);
 app.use('/api/tracks', trackRoutes);
 app.use('/api/albums', albumRoutes);
 app.use('/api/events', eventRoutes);

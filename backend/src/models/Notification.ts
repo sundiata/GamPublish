@@ -8,6 +8,7 @@ export interface INotification extends Document {
   status: 'sent' | 'scheduled';
   targetAudience: 'all' | 'group';
   groupId?: mongoose.Types.ObjectId;
+  imageUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -50,6 +51,10 @@ const notificationSchema = new Schema<INotification>(
     groupId: {
       type: Schema.Types.ObjectId,
       ref: 'Group',
+    },
+    imageUrl: {
+      type: String,
+      trim: true,
     },
   },
   {
