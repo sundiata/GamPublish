@@ -9,6 +9,7 @@ export interface Notification {
   status: 'sent' | 'scheduled';
   targetAudience: 'all' | 'group';
   groupId?: string;
+  imageUrl?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -20,6 +21,7 @@ export interface CreateNotificationData {
   sentAt: Date;
   targetAudience: Notification['targetAudience'];
   groupId?: string;
+  imageUrl?: string;
 }
 
 export interface UpdateNotificationData extends Partial<CreateNotificationData> {

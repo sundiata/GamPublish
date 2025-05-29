@@ -15,7 +15,7 @@ export const getAllNotifications = catchAsync(async (req: Request, res: Response
 // @route   POST /api/notifications
 // @access  Private
 export const createNotification = catchAsync(async (req: Request, res: Response) => {
-  const { title, message, type, sentAt, targetAudience, groupId } = req.body;
+  const { title, message, type, sentAt, targetAudience, groupId, imageUrl } = req.body;
 
   const notification = await Notification.create({
     title,
@@ -24,6 +24,7 @@ export const createNotification = catchAsync(async (req: Request, res: Response)
     sentAt: sentAt || new Date(),
     targetAudience,
     groupId,
+    imageUrl,
     status: sentAt && new Date(sentAt) > new Date() ? 'scheduled' : 'sent',
   });
 
@@ -55,7 +56,7 @@ export const deleteNotification = catchAsync(async (req: Request, res: Response)
 // @route   PUT /api/notifications/:id
 // @access  Private
 export const updateNotification = catchAsync(async (req: Request, res: Response) => {
-  const { title, message, type, sentAt, targetAudience, groupId, status } = req.body;
+  const { title, message, type, sentAt, targetAudience, groupId, status, imageUrl } = req.body;
 
   const notification = await Notification.findById(req.params.id);
   if (!notification) {
@@ -69,6 +70,7 @@ export const updateNotification = catchAsync(async (req: Request, res: Response)
   notification.targetAudience = targetAudience || notification.targetAudience;
   notification.groupId = groupId || notification.groupId;
   notification.status = status || notification.status;
+  notification.imageUrl = imageUrl || notification.imageUrl;
 
   const updatedNotification = await notification.save();
   res.json(updatedNotification);

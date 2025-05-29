@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, ScrollView, StatusBar, ActivityIndicator, Modal, Dimensions, Alert } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, ScrollView, StatusBar, ActivityIndicator, Modal, Dimensions, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SIZES, SHADOWS } from '../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Audio, AVPlaybackStatus, AVPlaybackStatusSuccess } from 'expo-av';
-import { getAllTracks, getAllAlbums, API_URL, Track, Album, getMediaUrl } from '../services/api';
-import fetch from 'node-fetch';
+import { getAllTracks, getAllAlbums, getMediaUrl, Track, Album } from '../services/api';
 import { BlurView } from 'expo-blur';
 import Animated, { 
   useAnimatedStyle, 
@@ -41,50 +40,6 @@ interface Category {
   items: RecitationItem[];
 }
 
-// Dummy data for testing
-const dummyTracks = [
-  {
-    id: '1',
-    title: 'Surah Al-Fatiha',
-    reciter: 'Mishary Rashid Alafasy',
-    image: { uri: 'https://i.ytimg.com/vi/7HXg7VvXxYc/maxresdefault.jpg' },
-    fileUrl: 'https://download.quranicaudio.com/quran/mishaari_raashid_al_3afaasee/001.mp3',
-    duration: '3:45'
-  },
-  {
-    id: '2',
-    title: 'Surah Al-Baqarah',
-    reciter: 'Abdul Rahman Al-Sudais',
-    image: { uri: 'https://i.ytimg.com/vi/7HXg7VvXxYc/maxresdefault.jpg' },
-    fileUrl: 'https://download.quranicaudio.com/quran/abdurrahmaan_as-sudays/002.mp3',
-    duration: '45:20'
-  },
-  {
-    id: '3',
-    title: 'Surah Yasin',
-    reciter: 'Saad Al-Ghamdi',
-    image: { uri: 'https://i.ytimg.com/vi/7HXg7VvXxYc/maxresdefault.jpg' },
-    fileUrl: 'https://download.quranicaudio.com/quran/sa3d_al-ghaamidi/036.mp3',
-    duration: '15:30'
-  },
-  {
-    id: '4',
-    title: 'Surah Ar-Rahman',
-    reciter: 'Maher Al Muaiqly',
-    image: { uri: 'https://i.ytimg.com/vi/7HXg7VvXxYc/maxresdefault.jpg' },
-    fileUrl: 'https://download.quranicaudio.com/quran/maher_al_muaiqly/055.mp3',
-    duration: '12:15'
-  },
-  {
-    id: '5',
-    title: 'Surah Al-Mulk',
-    reciter: 'Abdul Basit',
-    image: { uri: 'https://i.ytimg.com/vi/7HXg7VvXxYc/maxresdefault.jpg' },
-    fileUrl: 'https://download.quranicaudio.com/quran/abdul_basit_murattal/067.mp3',
-    duration: '8:45'
-  }
-];
-
 const AnimatedGradient = Animated.createAnimatedComponent(LinearGradient);
 
 // Add a purple accent color for the play button
@@ -107,6 +62,11 @@ const AudioScreen = ({ navigation }) => {
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const MAX_RETRIES = 3;
+  const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const progressUpdateInterval = useRef(null);
+  const progressBarRef = useRef<View>(null);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -150,11 +110,45 @@ const AudioScreen = ({ navigation }) => {
     };
   }, []);
 
+  // Add progress tracking
+  useEffect(() => {
+    if (sound && isPlaying) {
+      progressUpdateInterval.current = setInterval(async () => {
+        try {
+          const status = await sound.getStatusAsync();
+          if (status.isLoaded) {
+            const currentPosition = status.positionMillis;
+            const totalDuration = status.durationMillis;
+            setCurrentTime(currentPosition);
+            setDuration(totalDuration);
+            setProgress(currentPosition / totalDuration);
+          }
+        } catch (error) {
+          console.error('Error updating progress:', error);
+        }
+      }, 1000);
+    }
+
+    return () => {
+      if (progressUpdateInterval.current) {
+        clearInterval(progressUpdateInterval.current);
+      }
+    };
+  }, [sound, isPlaying]);
+
   // Enhanced playAudio function with better error handling
   const playAudio = async (item: RecitationItem) => {
     try {
       setIsBuffering(true);
       setPlaybackError(null);
+
+      // Log the audio URL we're trying to play
+      console.log('Attempting to play audio from URL:', item.fileUrl);
+
+      // Validate the URL
+      if (!item.fileUrl) {
+        throw new Error('No audio URL provided');
+      }
 
       // Unload any existing sound
       if (sound) {
@@ -169,6 +163,8 @@ const AudioScreen = ({ navigation }) => {
       // Create and load the new sound with retry logic
       const loadSound = async (retryAttempt = 0) => {
         try {
+          console.log(`Loading sound attempt ${retryAttempt + 1}...`);
+          
           const { sound: newSound, status } = await Audio.Sound.createAsync(
             { uri: item.fileUrl },
             { 
@@ -180,6 +176,7 @@ const AudioScreen = ({ navigation }) => {
               shouldCorrectPitch: true,
             },
             (status) => {
+              console.log('Playback status update:', status);
               if (status.isLoaded) {
                 setIsBuffering(status.isBuffering);
                 setIsPlaying(status.isPlaying);
@@ -278,44 +275,110 @@ const AudioScreen = ({ navigation }) => {
     return seconds < 10 ? `${Math.floor(minutes)}:0${seconds}` : `${Math.floor(minutes)}:${seconds}`;
   };
 
+  // Format time in mm:ss
+  const formatTime = (milliseconds: number) => {
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  // Handle progress bar seek
+  const handleSeek = async (value: number) => {
+    if (sound) {
+      try {
+        const newPosition = value * duration;
+        await sound.setPositionAsync(newPosition);
+        setCurrentTime(newPosition);
+        setProgress(value);
+      } catch (error) {
+        console.error('Error seeking:', error);
+      }
+    }
+  };
+
+  // Handle next track
+  const handleNextTrack = async () => {
+    if (!currentTrack) return;
+
+    const currentIndex = tracks.findIndex(track => track.id === currentTrack.id);
+    if (currentIndex < tracks.length - 1) {
+      const nextTrack = tracks[currentIndex + 1];
+      await playAudio(nextTrack);
+    }
+  };
+
+  // Handle previous track
+  const handlePreviousTrack = async () => {
+    if (!currentTrack) return;
+
+    const currentIndex = tracks.findIndex(track => track.id === currentTrack.id);
+    if (currentIndex > 0) {
+      const previousTrack = tracks[currentIndex - 1];
+      await playAudio(previousTrack);
+    }
+  };
+
+  // Fetch data on mount
+  useEffect(() => {
+    console.log('Component mounted, fetching data...');
+    fetchTracks();
+    fetchAlbums();
+  }, []);
+
+  // Add useEffect to log state changes
+  useEffect(() => {
+    console.log('State Update:', {
+      tracksCount: tracks.length,
+      albumsCount: albums.length,
+      isLoading,
+      error,
+      activeTab
+    });
+  }, [tracks, albums, isLoading, error, activeTab]);
+
   // Enhanced fetchTracks with retry logic
   const fetchTracks = async () => {
     try {
+      console.log('Starting to fetch tracks...');
       setIsLoading(true);
       setError(null);
+      const response = await getAllTracks();
+      console.log('Raw Tracks API Response:', JSON.stringify(response, null, 2));
       
-      const response = await getAllTracks({
-        page: 1,
-        limit: 50,
-        search: ''
-      });
-      
-      if (!response || !response.data || !response.data.tracks) {
-        throw new Error('Invalid response from API');
-      }
-
-      const processedTracks = response.data.tracks
-        .map(track => ({
-          id: track._id,
-          title: track.title,
-          reciter: track.artist,
-          image: typeof track.coverImage === 'string' ? 
-            { uri: getMediaUrl(track.coverImage) } : 
-            track.coverImage || defaultImage,
-          fileUrl: getMediaUrl(track.audioFile),
-          duration: track.duration || '0:00'
-        }));
-
-      setTracks(processedTracks);
-      setRetryCount(0);
-    } catch (error) {
-      console.error('Error in fetchTracks:', error);
-      if (retryCount < MAX_RETRIES) {
-        setRetryCount(prev => prev + 1);
-        setTimeout(fetchTracks, 1000 * (retryCount + 1));
+      if (response.status === 'success' && response.data.tracks) {
+        // Process tracks to ensure proper URLs
+        const processedTracks = response.data.tracks.map(track => {
+          // Construct full URLs by prepending the base URL
+          const baseUrl = 'http://localhost:4001'; // or your actual base URL
+          const audioUrl = `${baseUrl}${track.audioFile}`;
+          const coverUrl = `${baseUrl}${track.coverImage}`;
+          
+          console.log('Processing track:', {
+            id: track._id,
+            title: track.title,
+            audioUrl,
+            coverUrl
+          });
+          
+          return {
+            id: track._id,
+            title: track.title,
+            reciter: track.artist,
+            image: { uri: coverUrl },
+            fileUrl: audioUrl,
+            duration: track.duration || '0:00'
+          };
+        });
+        console.log('Setting tracks state with:', processedTracks.length, 'tracks');
+        setTracks(processedTracks);
       } else {
-        setError('Failed to load tracks. Please check your connection and try again.');
+        console.error('Invalid tracks response:', response);
+        setError('Failed to load tracks');
       }
+    } catch (err) {
+      console.error('Error fetching tracks:', err);
+      setError('Failed to load tracks');
     } finally {
       setIsLoading(false);
     }
@@ -324,54 +387,59 @@ const AudioScreen = ({ navigation }) => {
   // Enhanced fetchAlbums with retry logic
   const fetchAlbums = async () => {
     try {
+      console.log('Starting to fetch albums...');
       setIsLoading(true);
       setError(null);
-      
       const response = await getAllAlbums();
+      console.log('Raw Albums API Response:', JSON.stringify(response, null, 2));
       
-      if (!response || !response.data || !response.data.albums) {
-        throw new Error('Invalid response from API');
-      }
-
-      const processedAlbums = response.data.albums.map(album => ({
-        ...album,
-        coverImage: album.coverImage ? getMediaUrl(album.coverImage) : defaultImage,
-        tracks: album.tracks.map(track => ({
-          ...track,
-          coverImage: track.coverImage ? getMediaUrl(track.coverImage) : defaultImage,
-          audioFile: getMediaUrl(track.audioFile)
-        }))
-      }));
-
-      setAlbums(processedAlbums);
-      setRetryCount(0);
-    } catch (error) {
-      console.error('Error in fetchAlbums:', error);
-      if (retryCount < MAX_RETRIES) {
-        setRetryCount(prev => prev + 1);
-        setTimeout(fetchAlbums, 1000 * (retryCount + 1));
+      if (response.status === 'success' && response.data.albums) {
+        // Process albums to ensure proper URLs
+        const processedAlbums = response.data.albums.map(album => {
+          const baseUrl = 'http://localhost:4001'; // or your actual base URL
+          const albumCoverUrl = `${baseUrl}${album.coverImage}`;
+          
+          console.log('Processing album:', {
+            id: album._id,
+            title: album.title,
+            coverUrl: albumCoverUrl
+          });
+          
+          return {
+            ...album,
+            coverImage: albumCoverUrl,
+            tracks: album.tracks.map(track => {
+              const trackAudioUrl = `${baseUrl}${track.audioFile}`;
+              const trackCoverUrl = `${baseUrl}${track.coverImage}`;
+              
+              console.log('Processing album track:', {
+                id: track._id,
+                title: track.title,
+                audioUrl: trackAudioUrl,
+                coverUrl: trackCoverUrl
+              });
+              
+              return {
+                ...track,
+                coverImage: trackCoverUrl,
+                audioFile: trackAudioUrl
+              };
+            })
+          };
+        });
+        console.log('Setting albums state with:', processedAlbums.length, 'albums');
+        setAlbums(processedAlbums);
       } else {
-        setError('Failed to load albums. Please check your connection and try again.');
+        console.error('Invalid albums response:', response);
+        setError('Failed to load albums');
       }
+    } catch (err) {
+      console.error('Error fetching albums:', err);
+      setError('Failed to load albums');
     } finally {
       setIsLoading(false);
     }
   };
-
-  // Fetch data on mount
-  useEffect(() => {
-    fetchTracks();
-    fetchAlbums();
-  }, []);
-
-  // Add cleanup for audio when component unmounts
-  useEffect(() => {
-    return () => {
-      if (sound) {
-        sound.unloadAsync().catch(console.error);
-      }
-    };
-  }, [sound]);
 
   // Render loading state with better feedback
   const renderLoadingState = () => (
@@ -414,20 +482,23 @@ const AudioScreen = ({ navigation }) => {
 
   // Render track item
   const renderTrackItem = ({ item }: { item: RecitationItem }) => {
+    console.log('Rendering track item:', item);
+    if (!item) return null;
+    
     return (
       <TouchableOpacity 
         style={styles.trackItem}
         onPress={() => playAudio(item)}
       >
         <Image 
-          source={item.image} 
+          source={item.image || defaultImage} 
           style={styles.trackImage}
           defaultSource={defaultImage}
         />
         <View style={styles.trackInfo}>
-          <Text style={styles.trackTitle} numberOfLines={1}>{item.title}</Text>
-          <Text style={styles.trackArtist} numberOfLines={1}>{item.reciter}</Text>
-          <Text style={styles.trackDuration}>{item.duration}</Text>
+          <Text style={styles.trackTitle} numberOfLines={1}>{item.title || 'Untitled'}</Text>
+          <Text style={styles.trackArtist} numberOfLines={1}>{item.reciter || 'Unknown Artist'}</Text>
+          <Text style={styles.trackDuration}>{item.duration || '0:00'}</Text>
         </View>
         <TouchableOpacity 
           style={styles.playButton}
@@ -446,6 +517,7 @@ const AudioScreen = ({ navigation }) => {
   // Handle track selection from album
   const handleTrackSelect = async (track: RecitationItem) => {
     try {
+      console.log('Handling track selection:', track);
       // Stop current playback if any
       if (sound) {
         try {
@@ -497,24 +569,52 @@ const AudioScreen = ({ navigation }) => {
             />
             <Text style={styles.modalTitle}>{currentTrack.title}</Text>
             <Text style={styles.modalSubtitle}>{currentTrack.reciter}</Text>
+            
             {/* Progress Bar */}
             <View style={styles.progressBarContainer}>
               <View style={styles.progressTimeRow}>
-                <Text style={styles.progressTime}>0:00</Text>
-                <Text style={styles.progressTime}>{currentTrack.duration || '0:00'}</Text>
+                <Text style={styles.progressTime}>{formatTime(currentTime)}</Text>
+                <Text style={styles.progressTime}>{formatTime(duration)}</Text>
               </View>
-              <View style={styles.progressBar} />
-              {/* If you want a thumb, you can add a View with styles.progressThumb and position it based on progress */}
+              <TouchableOpacity 
+                ref={progressBarRef}
+                style={styles.progressBar}
+                onPress={(event) => {
+                  if (progressBarRef.current) {
+                    progressBarRef.current.measure((x, y, width, height, pageX, pageY) => {
+                      const { locationX } = event.nativeEvent;
+                      const newProgress = locationX / width;
+                      handleSeek(newProgress);
+                    });
+                  }
+                }}
+              >
+                <View style={[styles.progressBarFill, { width: `${progress * 100}%` }]} />
+              </TouchableOpacity>
             </View>
+
             {/* Controls Row */}
             <View style={styles.modalControls}>
-              <TouchableOpacity style={styles.modalSecondaryButton}>
+              <TouchableOpacity 
+                style={styles.modalSecondaryButton}
+                onPress={handlePreviousTrack}
+              >
                 <Ionicons name="play-skip-back" size={24} style={styles.modalSecondaryIcon} />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalControlButton} onPress={togglePlayback}>
-                <Ionicons name={isPlaying ? "pause" : "play"} size={36} style={styles.modalControlIcon} />
+              <TouchableOpacity 
+                style={styles.modalControlButton} 
+                onPress={togglePlayback}
+              >
+                <Ionicons 
+                  name={isPlaying ? "pause" : "play"} 
+                  size={36} 
+                  style={styles.modalControlIcon} 
+                />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalSecondaryButton}>
+              <TouchableOpacity 
+                style={styles.modalSecondaryButton}
+                onPress={handleNextTrack}
+              >
                 <Ionicons name="play-skip-forward" size={24} style={styles.modalSecondaryIcon} />
               </TouchableOpacity>
             </View>
@@ -525,23 +625,28 @@ const AudioScreen = ({ navigation }) => {
   );
 
   // Render album item
-  const renderAlbumItem = ({ item }: { item: Album }) => (
-    <TouchableOpacity 
-      style={styles.albumItem}
-      onPress={() => setSelectedAlbum(item)}
-    >
-      <Image 
-        source={{ uri: getMediaUrl(item.coverImage) }} 
-        style={styles.albumImage}
-        defaultSource={defaultImage}
-      />
-      <View style={styles.albumInfo}>
-        <Text style={styles.albumTitle}>{item.title}</Text>
-        <Text style={styles.albumArtist}>{item.artist}</Text>
-        <Text style={styles.trackCount}>{item.tracks.length} tracks</Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const renderAlbumItem = ({ item }: { item: Album }) => {
+    console.log('Rendering album item:', item);
+    if (!item) return null;
+    
+    return (
+      <TouchableOpacity 
+        style={styles.albumItem}
+        onPress={() => setSelectedAlbum(item)}
+      >
+        <Image 
+          source={{ uri: getMediaUrl(item.coverImage) || defaultImage }} 
+          style={styles.albumImage}
+          defaultSource={defaultImage}
+        />
+        <View style={styles.albumInfo}>
+          <Text style={styles.albumTitle} numberOfLines={1}>{item.title || 'Untitled Album'}</Text>
+          <Text style={styles.albumArtist} numberOfLines={1}>{item.artist || 'Unknown Artist'}</Text>
+          <Text style={styles.trackCount}>{item.tracks?.length || 0} tracks</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   // Render album tracks modal
   const renderAlbumTracksModal = () => (
@@ -563,7 +668,7 @@ const AudioScreen = ({ navigation }) => {
           {selectedAlbum && (
             <>
               <Image 
-                source={{ uri: getMediaUrl(selectedAlbum.coverImage) }} 
+                source={{ uri: selectedAlbum.coverImage }} 
                 style={styles.modalImage}
                 defaultSource={defaultImage}
               />
@@ -580,13 +685,13 @@ const AudioScreen = ({ navigation }) => {
                       id: item._id,
                       title: item.title,
                       reciter: item.artist,
-                      image: { uri: getMediaUrl(item.coverImage) },
-                      fileUrl: getMediaUrl(item.audioFile),
+                      image: { uri: item.coverImage },
+                      fileUrl: item.audioFile,
                       duration: item.duration || '0:00'
                     })}
                   >
                     <Image 
-                      source={{ uri: getMediaUrl(item.coverImage) }} 
+                      source={{ uri: item.coverImage }} 
                       style={styles.trackListItemImage}
                       defaultSource={defaultImage}
                     />
@@ -594,9 +699,22 @@ const AudioScreen = ({ navigation }) => {
                       <Text style={styles.trackListItemTitle}>{item.title}</Text>
                       <Text style={styles.trackListItemArtist}>{item.artist}</Text>
                     </View>
-                    <Text style={styles.trackListItemDuration}>{item.duration || '0:00'}</Text>
-                    <TouchableOpacity style={styles.trackListItemPlay}>
-                      <Ionicons name="play" size={20} color="black" />
+                    <TouchableOpacity 
+                      style={styles.trackListItemPlay}
+                      onPress={() => handleTrackSelect({
+                        id: item._id,
+                        title: item.title,
+                        reciter: item.artist,
+                        image: { uri: item.coverImage },
+                        fileUrl: item.audioFile,
+                        duration: item.duration || '0:00'
+                      })}
+                    >
+                      <Ionicons 
+                        name={currentTrack?.id === item._id && isPlaying ? "pause" : "play"} 
+                        size={20} 
+                        color="white" 
+                      />
                     </TouchableOpacity>
                   </TouchableOpacity>
                 )}
@@ -609,6 +727,126 @@ const AudioScreen = ({ navigation }) => {
     </Modal>
   );
 
+  // Modify the content rendering section
+  const renderContent = () => {
+    console.log('Rendering content with:', {
+      activeTab,
+      tracksCount: tracks.length,
+      albumsCount: albums.length,
+      isLoading,
+      error
+    });
+
+    if (isLoading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      );
+    }
+
+    if (error) {
+      return (
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={48} color={COLORS.error} />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={() => {
+              setError(null);
+              setRetryCount(0);
+              setIsLoading(true);
+              activeTab === 'tracks' ? fetchTracks() : fetchAlbums();
+            }}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (activeTab === 'tracks') {
+      if (tracks.length === 0) {
+        return (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No tracks available</Text>
+          </View>
+        );
+      }
+      return (
+        <View style={styles.tracksContainer}>
+          {tracks.map((item) => (
+            <TouchableOpacity 
+              key={item.id}
+              style={styles.trackItem}
+              onPress={() => {
+                setCurrentTrack(item);
+                setIsModalVisible(true);
+                playAudio(item);
+              }}
+            >
+              <Image 
+                source={item.image || defaultImage} 
+                style={styles.trackImage}
+                defaultSource={defaultImage}
+              />
+              <View style={styles.trackInfo}>
+                <Text style={styles.trackTitle} numberOfLines={1}>{item.title || 'Untitled'}</Text>
+                <Text style={styles.trackArtist} numberOfLines={1}>{item.reciter || 'Unknown Artist'}</Text>
+                <Text style={styles.trackDuration}>{item.duration || '0:00'}</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.playButton}
+                onPress={() => {
+                  setCurrentTrack(item);
+                  setIsModalVisible(true);
+                  playAudio(item);
+                }}
+              >
+                <Ionicons 
+                  name={currentTrack?.id === item.id && isPlaying ? "pause" : "play"} 
+                  size={24} 
+                  color="white" 
+                />
+              </TouchableOpacity>
+            </TouchableOpacity>
+          ))}
+        </View>
+      );
+    } else {
+      if (albums.length === 0) {
+        return (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No albums available</Text>
+          </View>
+        );
+      }
+      return (
+        <View style={styles.albumsContainer}>
+          {albums.map((album) => (
+            <TouchableOpacity 
+              key={album._id}
+              style={styles.albumItem}
+              onPress={() => setSelectedAlbum(album)}
+            >
+              <Image 
+                source={{ uri: album.coverImage || defaultImage }} 
+                style={styles.albumImage}
+                defaultSource={defaultImage}
+              />
+              <View style={styles.albumInfo}>
+                <Text style={styles.albumTitle} numberOfLines={1}>{album.title || 'Untitled Album'}</Text>
+                <Text style={styles.albumArtist} numberOfLines={1}>{album.artist || 'Unknown Artist'}</Text>
+                <Text style={styles.trackCount}>{album.tracks?.length || 0} tracks</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      );
+    }
+  };
+
   return (
     <SafeAreaView style={styles.landingContainer}>
       <StatusBar barStyle="dark-content" />
@@ -618,31 +856,31 @@ const AudioScreen = ({ navigation }) => {
           <Ionicons name="musical-notes" size={50} color="black" style={{ marginRight: 8 }} />
           <Text style={styles.headerTitle}>GamQuran</Text>
         </View>
-        {/* <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <TouchableOpacity style={styles.headerIconButton}>
-            <Ionicons name="notifications-outline" size={22} color="#222" />
-          </TouchableOpacity>
-          <Image source={defaultImage} style={styles.headerAvatar} />
-        </View> */}
       </View>
 
       <View style={styles.contentContainer}>
         <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Top Artist */}
-          <Text style={styles.sectionTitle}>Top Reciers</Text>
-          <FlatList
-            data={tracks.slice(0, 5)}
-            keyExtractor={item => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 8 }}
-            renderItem={({ item }) => (
-              <View style={styles.artistCircleContainer}>
-                <Image source={item.image} style={styles.artistCircle} />
-                <Text style={styles.artistName} numberOfLines={1}>{item.reciter}</Text>
-              </View>
-            )}
-          />
+          {/* Top Artists */}
+          <Text style={styles.sectionTitle}>Top Reciters</Text>
+          {isLoading ? (
+            <ActivityIndicator size="large" color={COLORS.primary} />
+          ) : error ? (
+            <Text style={styles.errorText}>{error}</Text>
+          ) : (
+            <FlatList
+              data={tracks.slice(0, 5)}
+              keyExtractor={item => item.id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 8 }}
+              renderItem={({ item }) => (
+                <View style={styles.artistCircleContainer}>
+                  <Image source={item.image} style={styles.artistCircle} />
+                  <Text style={styles.artistName} numberOfLines={1}>{item.reciter}</Text>
+                </View>
+              )}
+            />
+          )}
 
           {/* Tabs Section */}
           <View style={styles.tabsContainer}>
@@ -664,88 +902,8 @@ const AudioScreen = ({ navigation }) => {
             </TouchableOpacity>
           </View>
 
-          {/* Content based on active tab */}
-          {activeTab === 'tracks' ? (
-            <View style={styles.tracksContainer}>
-              {tracks.map((item) => (
-                <TouchableOpacity 
-                  key={item.id}
-                  style={styles.trackItem}
-                  onPress={() => {
-                    setCurrentTrack(item);
-                    setIsModalVisible(true);
-                    playAudio(item);
-                  }}
-                >
-                  <Image 
-                    source={item.image} 
-                    style={styles.trackImage}
-                    defaultSource={defaultImage}
-                  />
-                  <View style={styles.trackInfo}>
-                    <Text style={styles.trackTitle} numberOfLines={1}>{item.title}</Text>
-                    <Text style={styles.trackArtist} numberOfLines={1}>{item.reciter}</Text>
-                    <Text style={styles.trackDuration}>{item.duration}</Text>
-                  </View>
-                  <TouchableOpacity 
-                    style={styles.playButton}
-                    onPress={() => {
-                      setCurrentTrack(item);
-                      setIsModalVisible(true);
-                      playAudio(item);
-                    }}
-                  >
-                    <Ionicons 
-                      name={currentTrack?.id === item.id && isPlaying ? "pause" : "play"} 
-                      size={24} 
-                      color="white" 
-                    />
-                  </TouchableOpacity>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ) : (
-            <View style={styles.albumsContainer}>
-              {albums.map((album) => (
-                <TouchableOpacity 
-                  key={album._id}
-                  style={styles.albumItem}
-                  onPress={() => setSelectedAlbum(album)}
-                >
-                  <Image 
-                    source={{ uri: getMediaUrl(album.coverImage) }} 
-                    style={styles.albumImage}
-                    defaultSource={defaultImage}
-                  />
-                  <View style={styles.albumInfo}>
-                    <Text style={styles.albumTitle} numberOfLines={1}>{album.title}</Text>
-                    <Text style={styles.albumArtist} numberOfLines={1}>{album.artist}</Text>
-                    <View style={styles.albumMeta}>
-                      <Text style={styles.trackCount}>{album.tracks.length} tracks</Text>
-                      <TouchableOpacity 
-                        style={styles.albumPlayButton}
-                        onPress={() => {
-                          if (album.tracks.length > 0) {
-                            const firstTrack = album.tracks[0];
-                            handleTrackSelect({
-                              id: firstTrack._id,
-                              title: firstTrack.title,
-                              reciter: firstTrack.artist,
-                              image: { uri: getMediaUrl(firstTrack.coverImage) },
-                              fileUrl: getMediaUrl(firstTrack.audioFile),
-                              duration: firstTrack.duration || '0:00'
-                            });
-                          }
-                        }}
-                      >
-                        <Ionicons name="play" size={16} color="white" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
+          {/* Content */}
+          {renderContent()}
         </ScrollView>
       </View>
 
@@ -811,15 +969,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#222',
   },
-  headerIconButton: {
-    padding: 8,
-    marginRight: 12,
-  },
-  headerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-  },
   contentContainer: {
     flex: 1,
     marginTop: 25, // Height of header
@@ -848,77 +997,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     width: 80,
   },
-  newAlbumContainer: {
-    marginHorizontal: 16,
-    borderRadius: 16,
-    overflow: 'hidden',
-    height: 200,
-    position: 'relative',
-  },
-  newAlbumImage: {
-    width: '100%',
-    height: '100%',
-  },
-  newAlbumOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-  },
-  newAlbumText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  newAlbumTime: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 14,
-    marginTop: 4,
-  },
-  newAlbumPlayButton: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    backgroundColor: '#000000',
-    borderRadius: 30,
-    width: 60,
-    height: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  recentlyPlayedGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    padding: 8,
-  },
-  recentlyPlayedItem: {
-    width: '33.33%',
-    padding: 8,
-  },
-  recentlyPlayedImage: {
-    width: '100%',
-    aspectRatio: 1,
-    borderRadius: 8,
-  },
-  recentlyPlayedPlayButton: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    backgroundColor: '#000000',
-    borderRadius: 20,
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  recentlyPlayedTitle: {
-    fontSize: 12,
-    color: '#222',
-    marginTop: 8,
-    textAlign: 'center',
-  },
   modalContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.9)',
@@ -931,6 +1009,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 24,
     alignItems: 'center',
+    maxHeight: '80%',
   },
   modalImage: {
     width: 250,
@@ -1094,6 +1173,15 @@ const styles = StyleSheet.create({
     height: 4,
     backgroundColor: 'rgba(0, 0, 0, 0.1)',
     borderRadius: 2,
+    position: 'relative',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#000000',
+    borderRadius: 2,
+    position: 'absolute',
+    left: 0,
+    top: 0,
   },
   trackItem: {
     flexDirection: 'row',
@@ -1254,11 +1342,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#000000',
   },
-  trackListItemDuration: {
-    fontSize: 12,
-    color: '#000000',
-    marginLeft: 8,
-  },
   trackListItemPlay: {
     width: 40,
     height: 40,
@@ -1300,6 +1383,17 @@ const styles = StyleSheet.create({
   },
   tracksContainer: {
     paddingHorizontal: 16,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
   },
 });
 

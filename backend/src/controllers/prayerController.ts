@@ -3,13 +3,33 @@ import { Prayer, IPrayer } from '../models/Prayer';
 
 // @desc    Get all prayers
 // @route   GET /api/prayers
-// @access  Private
+// @access  Public
 export const getPrayers = async (req: Request, res: Response) => {
   try {
-    const prayers = await Prayer.find().sort({ date: -1, time: -1 });
-    res.json(prayers);
+    console.log('Fetching all prayers...');
+    
+    const prayers = await Prayer.find()
+      .sort({ date: -1, time: -1 })
+      .lean();
+
+    console.log(`Found ${prayers.length} prayers`);
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        prayers,
+        total: prayers.length,
+        totalPages: 1,
+        currentPage: 1
+      }
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error in getPrayers:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Error fetching prayers',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 };
 

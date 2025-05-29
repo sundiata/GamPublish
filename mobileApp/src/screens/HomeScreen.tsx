@@ -21,18 +21,85 @@ import { useTheme } from "../context/ThemeContext";
 import { useNavigation } from "@react-navigation/native";
 import { 
   fetchIslamicDate, 
-  getPrayerTimes,
-  getAllPrayers,
+  // getPrayerTimes,
+  // getAllPrayers,
   getAllTracks,
   getQuranAudio,
   getQuranReciters,
   getQuranAudioUrl 
 } from "../services/api";
 import * as Location from "expo-location";
-import { PrayerTimes } from "../services/api";
 import Header from '../components/Header';
+import axios from 'axios';
+import { LinearGradient } from 'expo-linear-gradient';
+
 const DEFAULT_LATITUDE = 13.4549;
 const DEFAULT_LONGITUDE = -16.579;
+
+// API URL based on platform
+const API_URL = Platform.select({
+  ios: 'http://127.0.0.1:4001/api',
+  android: 'http://10.0.2.2:4001/api',
+  default: 'http://127.0.0.1:4001/api'
+});
+
+// Prayer Types
+interface Prayer {
+  _id: string;
+  title: string;
+  date: string;
+  time: string;
+  category: 'Fajr' | 'Duha' | 'Dhuhr' | 'Asr' | 'Maghrib' | 'Isha' | 'Jumu\'ah';
+  status: 'Published' | 'Draft';
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface PrayerResponse {
+  status: string;
+  data: {
+    currentPage: number;
+    prayers: Prayer[];
+    total: number;
+    totalPages: number;
+  };
+}
+
+interface PrayerTimes {
+  fajr: string;
+  sunrise: string;
+  dhuhr: string;
+  asr: string;
+  maghrib: string;
+  isha: string;
+  [key: string]: string;
+}
+
+// Add News interface
+interface News {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  date: string;
+  category: string;
+}
+
+// Add Notification interface
+interface Notification {
+  _id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'alert' | 'reminder';
+  sentAt: string;
+  status: 'sent' | 'scheduled';
+  targetAudience: 'all' | 'group';
+  groupId?: string;
+  imageUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export default function HomeScreen({ navigation }) {
   const { colors, isDarkMode } = useTheme();
@@ -52,11 +119,40 @@ export default function HomeScreen({ navigation }) {
     longitude: DEFAULT_LONGITUDE,
   });
   const [prayerTimes, setPrayerTimes] = useState<PrayerTimes | null>(null);
-  const [prayerStatuses, setPrayerStatuses] = useState({});
+  const [prayerStatuses, setPrayerStatuses] = useState<{ [key: string]: string }>({});
   const [animation] = useState(new Animated.Value(0));
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const countdownIntervalRef = useRef(null);
+  const [prayers, setPrayers] = useState<Prayer[]>([]);
+  const [news, setNews] = useState<News[]>([
+    {
+      id: '1',
+      title: 'Ramadan 2024 Announcement',
+      description: 'Important dates and guidelines for the upcoming holy month',
+      imageUrl: 'https://example.com/ramadan.jpg',
+      date: '2024-03-10',
+      category: 'Announcement'
+    },
+    {
+      id: '2',
+      title: 'New Mosque Opening',
+      description: 'Community celebrates the opening of a new mosque in the city',
+      imageUrl: 'https://example.com/mosque.jpg',
+      date: '2024-03-09',
+      category: 'Community'
+    },
+    {
+      id: '3',
+      title: 'Islamic Education Program',
+      description: 'Free Quran classes for children starting next week',
+      imageUrl: 'https://example.com/education.jpg',
+      date: '2024-03-08',
+      category: 'Education'
+    }
+  ]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize and update time-related states
   useEffect(() => {
@@ -98,15 +194,12 @@ export default function HomeScreen({ navigation }) {
         const hijriDate = await fetchIslamicDate();
         setIslamicDate(hijriDate.format);
 
-        // Get Prayer Times
-        const times = await getPrayerTimes();
-        console.log('Fetched prayer times:', times);
-        setPrayerTimes(times);
-        updatePrayerTimesAndStatuses(times);
+        // Fetch prayers and notifications
+        await Promise.all([fetchPrayers(), fetchNotifications()]);
 
       } catch (error) {
         console.error("Error initializing app:", error);
-        setError("Failed to load prayer times. Please try again.");
+        setError("Failed to load data. Please try again.");
       } finally {
         setIsLoading(false);
       }
@@ -133,6 +226,56 @@ export default function HomeScreen({ navigation }) {
       }
     };
   }, []);
+
+  // Fetch prayers from API
+  const fetchPrayers = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const response = await axios.get<PrayerResponse>(`${API_URL}/prayers`);
+      console.log('API Response:', response.data);
+      
+      if (response.data.status === 'success' && response.data.data.prayers) {
+        // Sort prayers by category
+        const sortedPrayers = response.data.data.prayers.sort((a, b) => {
+          const categoryOrder = {
+            'Fajr': 1,
+            'Duha': 2,
+            'Dhuhr': 3,
+            'Asr': 4,
+            'Maghrib': 5,
+            'Isha': 6,
+            'Jumu\'ah': 7
+          };
+          return (categoryOrder[a.category] || 0) - (categoryOrder[b.category] || 0);
+        });
+        setPrayers(sortedPrayers);
+        
+        // Update prayer times and statuses
+        const prayerTimes: PrayerTimes = sortedPrayers.reduce((acc: PrayerTimes, prayer: Prayer) => {
+          acc[prayer.category.toLowerCase()] = prayer.time;
+          return acc;
+        }, {
+          fajr: '',
+          sunrise: '',
+          dhuhr: '',
+          asr: '',
+          maghrib: '',
+          isha: ''
+        });
+        
+        setPrayerTimes(prayerTimes);
+        updatePrayerTimesAndStatuses(prayerTimes);
+      } else {
+        setError('Failed to load prayers');
+      }
+    } catch (err) {
+      console.error('Error fetching prayers:', err);
+      setError('Failed to load prayers');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Format time string from API (24-hour format) to time object
   const formatTimeObject = (timeStr) => {
@@ -167,8 +310,6 @@ export default function HomeScreen({ navigation }) {
   // Update current time
   const updateCurrentTime = () => {
     const now = new Date();
-
-    // Update current time display
     const hours = now.getHours();
     const minutes = now.getMinutes();
     setCurrentTime(
@@ -176,11 +317,6 @@ export default function HomeScreen({ navigation }) {
         .toString()
         .padStart(2, "0")}`
     );
-
-    // Update prayer times and statuses if available
-    if (prayerTimes) {
-      updatePrayerTimesAndStatuses(prayerTimes);
-    }
   };
 
   // Update prayer times and statuses
@@ -305,23 +441,6 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  const renderFeatureButton = (icon, label, screenName) => (
-    <TouchableOpacity
-      style={styles.featureButton}
-      onPress={() => handleFeaturePress(screenName)}
-    >
-      <View
-        style={[
-          styles.featureIconContainer,
-          { backgroundColor: colors.primary },
-        ]}
-      >
-        {icon}
-      </View>
-      <Text style={[styles.featureLabel, { color: colors.text }]}>{label}</Text>
-    </TouchableOpacity>
-  );
-
   const getPrayerStatusStyle = (status) => {
     switch (status) {
       case "completed":
@@ -364,6 +483,86 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
+  const renderPrayerItem = (prayer: Prayer) => {
+    const status = prayerStatuses[prayer.category.toLowerCase()] || 'pending';
+    const statusStyle = getPrayerStatusStyle(status);
+    const isNext = status === "next";
+
+    return (
+      <Animated.View
+        key={prayer._id}
+        style={[
+          styles.enhancedPrayerItem,
+          isNext && [styles.nextPrayerItem, { borderLeftColor: colors.primary }],
+        ]}
+      >
+        <View style={styles.prayerIconContainer}>
+          <LinearGradient
+            colors={isNext ? ['#4A90E2', '#357ABD'] : ['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.1)']}
+            style={styles.prayerIconGradient}
+          >
+            <Feather
+              name={getPrayerIcon(prayer.category)}
+              size={22}
+              color={isNext ? 'white' : 'black'}
+            />
+          </LinearGradient>
+        </View>
+        <View style={styles.prayerNameTime}>
+          <Text style={[styles.prayerName, isNext && styles.nextPrayerText]}>
+            {prayer.title}
+          </Text>
+          <Text style={styles.prayerSchedule}>
+            {prayer.time}
+          </Text>
+        </View>
+        <View style={[styles.prayerStatus, { backgroundColor: isNext ? `${colors.primary}15` : 'rgba(0,0,0,0.05)' }]}>
+          <Text style={[styles.statusText, { color: isNext ? colors.primary : 'black' }]}>
+            {statusStyle.text}
+          </Text>
+        </View>
+      </Animated.View>
+    );
+  };
+
+  // Add fetchNotifications function
+  const fetchNotifications = async () => {
+    try {
+      setIsLoadingNotifications(true);
+      const response = await axios.get(`${API_URL}/notifications`);
+      
+      if (Array.isArray(response.data)) {
+        setNotifications(response.data);
+      } else if (response.data.status === 'success' && response.data.data?.notifications) {
+        setNotifications(response.data.data.notifications);
+      }
+    } catch (error) {
+      if (error.response) {
+        console.error('Error status:', error.response.status);
+      }
+    } finally {
+      setIsLoadingNotifications(false);
+    }
+  };
+
+  // Add a separate useEffect for notifications
+  useEffect(() => {
+    fetchNotifications();
+  }, []); // Empty dependency array means it only runs once on mount
+
+  useEffect(() => {
+    // Update prayer times and statuses every minute
+    const prayerUpdateInterval = setInterval(() => {
+      if (prayerTimes) {
+        updatePrayerTimesAndStatuses(prayerTimes);
+      }
+    }, 60000); // Update every minute
+
+    return () => {
+      clearInterval(prayerUpdateInterval);
+    };
+  }, [prayerTimes]);
+
   if (isLoading) {
     return (
       <SafeAreaView
@@ -400,115 +599,119 @@ export default function HomeScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
         >
           {/* Current Time Display */}
-          <View
-            style={[
-              styles.timeDisplay,
-              { backgroundColor: 'white' },
-            ]}
-          >
-            <Text style={[styles.currentTime, { color: 'black' }]}>
-              {currentTime}
-            </Text>
-            <Text style={[styles.timeInfo, { color: 'black' }]}>
-              {isLoading ? 'Loading prayer times...' : 
-               error ? error :
-               nextPrayer ? `${nextPrayer.name} · ${countdown} left` : 'No prayer times available'}
-            </Text>
+          <View style={styles.timeDisplayContainer}>
+            <LinearGradient
+              colors={['#4A90E2', '#357ABD']}
+              style={styles.timeDisplay}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Text style={[styles.currentTime, { color: 'white' }]}>
+                {currentTime}
+              </Text>
+              <Text style={[styles.timeInfo, { color: 'white' }]}>
+                {isLoading ? 'Loading prayer times...' : 
+                 error ? error :
+                 nextPrayer ? `${nextPrayer.name} · ${countdown} left` : 'No prayer times available'}
+              </Text>
 
-            {/* Prayer Times Row */}
-            {prayerTimes && (
-              <View style={styles.prayerTimesRow}>
-                {Object.entries(prayerTimes).map(([name, time]) => (
-                  <View key={name} style={styles.prayerTimeItem}>
-                    <Feather
-                      name={getPrayerIcon(name)}
-                      size={20}
-                      color={'black'}
-                    />
-                    <Text style={[styles.prayerTimeLabel, { color: 'black' }]}>
-                      {name.charAt(0).toUpperCase() + name.slice(1)}
-                    </Text>
-                    <Text style={[styles.prayerTimeValue, { color: 'black' }]}>
-                      {time}
-                    </Text>
-                  </View>
-                ))}
+              {/* Prayer Times Row */}
+              {prayerTimes && (
+                <View style={styles.prayerTimesRow}>
+                  {Object.entries(prayerTimes).map(([name, time]) => (
+                    <View key={name} style={styles.prayerTimeItem}>
+                      <Feather
+                        name={getPrayerIcon(name)}
+                        size={20}
+                        color={'white'}
+                      />
+                      <Text style={[styles.prayerTimeLabel, { color: 'white' }]}>
+                        {name.charAt(0).toUpperCase() + name.slice(1)}
+                      </Text>
+                      <Text style={[styles.prayerTimeValue, { color: 'white' }]}>
+                        {time}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Indicator */}
+              <View style={styles.indicator}>
+                <View style={[styles.indicatorDot, { backgroundColor: 'white' }]} />
               </View>
-            )}
-
-            {/* Indicator */}
-            <View style={styles.indicator}>
-              <View style={[styles.indicatorDot, { backgroundColor: colors.secondary }]} />
-            </View>
+            </LinearGradient>
           </View>
 
-          {/* All Features */}
-          <View
-            style={[
-              styles.featuresSection,
-              { backgroundColor: colors.background },
-            ]}
-          >
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              All Features
-            </Text>
-            <View style={styles.featuresGrid}>
-              {renderFeatureButton(
-                <Ionicons
-                  name="book-outline"
-                  size={30}
-                  color={'black'}
-                />,
-                "Quran",
-                "Quran"
-              )}
-              {renderFeatureButton(
-                <Ionicons
-                  name="volume-high-outline"
-                  size={30}
-                  color={'black'}
-                />,
-                "Adzan",
-                "Adzan"
-              )}
-              {renderFeatureButton(
-                <Ionicons
-                  name="compass-outline"
-                  size={30}
-                  color={'black'}
-                />,
-                "Qibla",
-                "Qibla"
-              )}
-              {renderFeatureButton(
-                <Ionicons
-                  name="heart-outline"
-                  size={30}
-                  color={'black'}
-                />,
-                "Donation",
-                "Donation"
-              )}
-              {renderFeatureButton(
-                <Ionicons
-                  name="grid-outline"
-                  size={30}
-                  color={'black'}
-                />,
-                "All",
-                "AllFeatures"
-              )}
+          {/* News Section */}
+          <View style={[styles.newsSection, { backgroundColor: 'white' }]}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: 'black' }]}>
+                Latest News
+              </Text>
+              <TouchableOpacity>
+                <Text style={[styles.viewAllText, { color: colors.primary }]}>
+                  View All
+                </Text>
+              </TouchableOpacity>
             </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.newsContainer}
+            >
+              {isLoadingNotifications ? (
+                <View style={styles.newsLoadingContainer}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                </View>
+              ) : notifications && notifications.length > 0 ? (
+                notifications.map((notification) => {
+                  const imageSource = notification.imageUrl 
+                    ? { uri: notification.imageUrl.startsWith('data:') 
+                        ? notification.imageUrl 
+                        : `data:image/jpeg;base64,${notification.imageUrl}` }
+                    : { uri: 'https://via.placeholder.com/280x200?text=No+Image' };
+
+                  return (
+                    <TouchableOpacity
+                      key={notification._id}
+                      style={styles.newsCard}
+                      onPress={() => {
+                        // Handle notification press
+                      }}
+                    >
+                      <Image
+                        source={imageSource}
+                        style={styles.newsImage}
+                      />
+                      <LinearGradient
+                        colors={['transparent', 'rgba(0,0,0,0.9)']}
+                        style={styles.newsGradient}
+                      >
+                        <View style={styles.newsContent}>
+                          <Text style={styles.newsCategory}>{notification.title}</Text>
+                          <Text style={[styles.newsTitle, { color: 'white' }]} numberOfLines={2}>
+                            {notification.message || 'No Message'}
+                          </Text>
+                          <Text style={styles.newsDate}>
+                            {new Date(notification.sentAt).toLocaleDateString()}
+                          </Text>
+                        </View>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  );
+                })
+              ) : (
+                <View style={styles.noNewsContainer}>
+                  <Text style={styles.noNewsText}>No news available</Text>
+                </View>
+              )}
+            </ScrollView>
           </View>
 
           {/* Favorites */}
-          <View
-            style={[
-              styles.favoritesSection,
-              { backgroundColor: colors.background },
-            ]}
-          >
-            <Text style={[styles.sectionLabel, { color: colors.text }]}>
+          <View style={[styles.favoritesSection, { backgroundColor: 'white' }]}>
+            <Text style={[styles.sectionLabel, { color: 'black' }]}>
               Favourites
             </Text>
             <ScrollView
@@ -574,12 +777,7 @@ export default function HomeScreen({ navigation }) {
           </View>
 
           {/* Continue Listening */}
-          <View
-            style={[
-              styles.continueListeningSection,
-              { backgroundColor: colors.background },
-            ]}
-          >
+          <View style={[styles.continueListeningSection, { backgroundColor: 'white' }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
               Continue Listening
             </Text>
@@ -587,8 +785,6 @@ export default function HomeScreen({ navigation }) {
               style={[
                 styles.continueListeningCard,
                 { backgroundColor: 'rgba(0, 0, 0, 0.1)' },
-  
-
               ]}
               onPress={() =>
                 navigation.navigate("NowPlayingScreen", {
@@ -651,14 +847,9 @@ export default function HomeScreen({ navigation }) {
           </View>
 
           {/* Daily Prayers */}
-          <View
-            style={[
-              styles.dailyPrayersSection,
-              { backgroundColor: colors.background },
-            ]}
-          >
+          <View style={[styles.dailyPrayersSection, { backgroundColor: 'white' }]}>
             <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              <Text style={[styles.sectionTitle, { color: 'black' }]}>
                 Daily Prayers
               </Text>
               <TouchableOpacity onPress={navigateToPrayerTimes}>
@@ -668,94 +859,8 @@ export default function HomeScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
-            <View
-              style={[
-                styles.prayersListContainer,
-                { backgroundColor: colors.cardBackground },
-              ]}
-            >
-              {Object.entries(prayerStatuses).map(([name, status]) => {
-                const statusStyle = getPrayerStatusStyle(status);
-                const isNext = status === "next";
-
-                // Create animated styles for the "next" prayer
-                const animatedStyle = isNext
-                  ? {
-                      transform: [
-                        {
-                          scale: animation.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [1, 1.03],
-                          }),
-                        },
-                      ],
-                      shadowOpacity: animation.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0.1, 0.3],
-                      }),
-                    }
-                  : {};
-
-                return (
-                  <Animated.View
-                    key={name}
-                    style={[
-                      styles.enhancedPrayerItem,
-                      isNext && styles.nextPrayerItem,
-                      { borderBottomColor: colors.divider },
-                      animatedStyle,
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.prayerIconContainer,
-                        { backgroundColor: "rgba(0, 0, 0, 0.05)" },
-                      ]}
-                    >
-                      <Feather
-                        name={getPrayerIcon(name)}
-                        size={24}
-                        color={isNext ? 'red' : 'black'}
-                      />
-                    </View>
-                    <View style={styles.prayerNameTime}>
-                      <Text
-                        style={[
-                          styles.prayerName,
-                          { color: colors.text },
-                          isNext && [
-                            styles.nextPrayerText,
-                            { color: colors.primary },
-                          ],
-                        ]}
-                      >
-                        {name.charAt(0).toUpperCase() + name.slice(1)}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.prayerSchedule,
-                          { color: colors.textSecondary },
-                        ]}
-                      >
-                        {prayerTimes[name]}
-                      </Text>
-                    </View>
-                    <View
-                      style={[
-                        styles.prayerStatus,
-                        { backgroundColor: 'rgba(57, 62, 62, 0.47)' },
-                        
-                      ]}
-                    >
-                      <Text
-                        style={[styles.statusText, { color: 'white' }]}
-                      >
-                        {statusStyle.text}
-                      </Text>
-                    </View>
-                  </Animated.View>
-                );
-              })}
+            <View style={styles.prayersListContainer}>
+              {prayers.map((prayer) => renderPrayerItem(prayer))}
             </View>
           </View>
         </ScrollView>
@@ -783,14 +888,24 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  timeDisplayContainer: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
   timeDisplay: {
     paddingHorizontal: 16,
     paddingBottom: 32,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
-    backgroundColor: '#FFFFFF',
-    bottom: 15,
-    
+    paddingTop: 16,
   },
   currentTime: {
     fontSize: 48,
@@ -926,101 +1041,161 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: 'rgba(0, 0, 0, 0.1)',
   },
-  featuresSection: {
-    padding: 16,
-    backgroundColor: '#FFFFFF',
-  },
-  featuresGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-  },
-  featureButton: {
-    width: "18%",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  featureIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
-  },
-  featureLabel: {
-    fontSize: 14,
-    textAlign: "center",
-    color: '#000000',
-  },
   dailyPrayersSection: {
     padding: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'white',
+    marginTop: 8,
   },
   sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 16,
+    paddingHorizontal: 4,
   },
   viewAllText: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: '#000000',
+    fontSize: 14,
+    fontWeight: '600',
   },
   prayersListContainer: {
-    borderRadius: 8,
-    overflow: "hidden",
-    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    backgroundColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+    overflow: 'hidden',
+    marginHorizontal: 4,
   },
   enhancedPrayerItem: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#000000',
+    borderBottomColor: 'rgba(0, 0, 0, 0.03)',
+    backgroundColor: 'white',
   },
   nextPrayerItem: {
+    backgroundColor: 'rgba(74, 144, 226, 0.05)',
     borderLeftWidth: 3,
-    borderLeftColor: '#000000',
   },
   prayerIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    marginRight: 14,
+    overflow: 'hidden',
+  },
+  prayerIconGradient: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   prayerNameTime: {
     flex: 1,
-    marginLeft: 8,
   },
   prayerName: {
     fontSize: 16,
-    fontWeight: "500",
-    marginBottom: 4,
-    color: '#000000',
+    fontWeight: '600',
+    marginBottom: 3,
+    color: 'black',
   },
   nextPrayerText: {
-    fontWeight: "700",
-    color: '#000000',
+    fontWeight: '700',
+    color: '#4A90E2',
   },
   prayerSchedule: {
     fontSize: 14,
-    color: '#000000',
+    color: 'rgba(0, 0, 0, 0.6)',
   },
   prayerStatus: {
     paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
   },
   statusText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  newsSection: {
+    padding: 16,
+    backgroundColor: 'white',
+  },
+  newsContainer: {
+    paddingRight: 16,
+  },
+  newsCard: {
+    width: 280,
+    height: 200,
+    marginRight: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  newsImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  newsGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '100%',
+    justifyContent: 'flex-end',
+    padding: 16,
+  },
+  newsContent: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  newsCategory: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
+  newsTitle: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  newsDate: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 12,
+  },
+  newsLoadingContainer: {  // Renamed from loadingContainer to avoid duplicate
+    width: 280,
+    height: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noNewsContainer: {
+    width: 280,
+    height: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    borderRadius: 16,
+  },
+  noNewsText: {
+    fontSize: 16,
+    color: 'rgba(0, 0, 0, 0.5)',
   },
 });

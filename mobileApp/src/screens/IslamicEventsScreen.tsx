@@ -1,291 +1,435 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, Dimensions, StatusBar } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Platform,
+  Image,
+  ImageBackground,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '../constants/theme';
-import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
+import axios from 'axios';
 import Header from '../components/Header';
-import * as Location from "expo-location";
-import { fetchIslamicDate } from "../services/api";
+import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-const { width } = Dimensions.get('window');
+type RootStackParamList = {
+  EventPayment: {
+    event: {
+      id: string;
+      name: string;
+      date: string;
+      location: string;
+      image: any;
+    };
+    seatNumber: string;
+  };
+};
 
-// Import local images
-const ramadanImage = require('../assets/maher.jpeg');
-const eidFitrImage = require('../assets/maher.jpeg');
-const eidAdhaImage = require('../assets/maher.jpeg');
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-const islamicEvents = [
-  {
-    id: 1,
-    name: 'Ramadan',
-    date: 'March 10, 2024',
-    hijriDate: '1 Ramadan 1445',
-    description: 'Join us for the blessed month of Ramadan. Special Taraweeh prayers and Iftar gatherings daily.',
-    daysUntil: 30,
-    image: ramadanImage,
-    location: 'Central Mosque, Banjul',
-    availableSeats: 200,
-    price: 'Free',
-  },
-  {
-    id: 2,
-    name: 'Eid al-Fitr Celebration',
-    date: 'April 9, 2024',
-    hijriDate: '1 Shawwal 1445',
-    description: 'Community Eid celebration with special prayers, activities for children, and communal feast.',
-    daysUntil: 60,
-    image: eidFitrImage,
-    location: 'Eid Prayer Ground, Serekunda',
-    availableSeats: 500,
-    price: 'Free',
-  },
-  {
-    id: 3,
-    name: 'Eid al-Adha Festival',
-    date: 'June 16, 2024',
-    hijriDate: '10 Dhul Hijjah 1445',
-    description: 'Join the community for Eid prayers and the traditional sacrifice ceremony.',
-    daysUntil: 128,
-    image: eidAdhaImage,
-    location: 'Main Prayer Ground, Brikama',
-    availableSeats: 300,
-    price: 'Free',
-  },
-];
+// API URL based on platform
+const API_URL = Platform.select({
+  ios: 'http://127.0.0.1:4001/api',
+  android: 'http://10.0.2.2:4001/api',
+  default: 'http://127.0.0.1:4001/api'
+});
 
-const IslamicEventsScreen = () => {
-  const navigation = useNavigation();
+// Default image for events
+const DEFAULT_EVENT_IMAGE = 'https://via.placeholder.com/400x200?text=Islamic+Event';
+
+interface Event {
+  _id: string;
+  title: string;
+  description: string;
+  date: string;
+  location: string;
+  category: string;
+  image: string;
+  price: number;
+  capacity: number;
+  status: 'upcoming' | 'ongoing' | 'completed';
+  organizer: string;
+  attendees: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface EventResponse {
+  status: string;
+  data: {
+    currentPage: number;
+    events: Event[];
+    total: number;
+    totalPages: number;
+  };
+}
+
+export default function IslamicEventsScreen() {
   const { colors, isDarkMode } = useTheme();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filteredEvents, setFilteredEvents] = useState(islamicEvents);
+  const navigation = useNavigation<NavigationProp>();
+  const [events, setEvents] = useState<Event[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [islamicDate, setIslamicDate] = useState('');
   const [location, setLocation] = useState('Loading location...');
+  const [imageLoadErrors, setImageLoadErrors] = useState<{ [key: string]: boolean }>({});
+  const [isBooking, setIsBooking] = useState<{ [key: string]: boolean }>({});
 
   useEffect(() => {
-    loadIslamicDate();
-    loadLocation();
+    fetchEvents();
   }, []);
 
-  const loadIslamicDate = async () => {
+  const fetchEvents = async () => {
     try {
-      const hijriDate = await fetchIslamicDate();
-      setIslamicDate(hijriDate.format);
-    } catch (error) {
-      console.error("Error loading Islamic date:", error);
-      setIslamicDate('Loading date...');
-    }
-  };
-
-  const loadLocation = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === "granted") {
-        const position = await Location.getCurrentPositionAsync({});
-        const geocode = await Location.reverseGeocodeAsync({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
+      setIsLoading(true);
+      setError(null);
+      const response = await axios.get<EventResponse>(`${API_URL}/events`);
+      
+      if (response.data.status === 'success' && response.data.data.events) {
+        // Sort events by date
+        const sortedEvents = response.data.data.events.sort((a, b) => {
+          return new Date(a.date).getTime() - new Date(b.date).getTime();
         });
-
-        if (geocode && geocode[0]) {
-          const { city, country } = geocode[0];
-          const locationName = `${city || "Unknown"}, ${country || "Unknown"}`;
-          setLocation(locationName);
-        }
+        setEvents(sortedEvents);
+      } else {
+        setError('Failed to load events');
       }
-    } catch (error) {
-      console.error("Error getting location:", error);
-      setLocation('Location unavailable');
+    } catch (err) {
+      console.error('Error fetching events:', err);
+      setError('Failed to load events');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleSearch = (text) => {
-    setSearchQuery(text);
-    if (text.trim() === '') {
-      setFilteredEvents(islamicEvents);
-    } else {
-      const filtered = islamicEvents.filter(event => 
-        event.name.toLowerCase().includes(text.toLowerCase()) ||
-        event.description.toLowerCase().includes(text.toLowerCase()) ||
-        event.location.toLowerCase().includes(text.toLowerCase())
-      );
-      setFilteredEvents(filtered);
-    }
-  };
-
-  const handleBooking = (event) => {
-    // Generate a random seat number
-    const seatNumber = Math.floor(Math.random() * event.availableSeats) + 1;
-    navigation.navigate('EventPayment', {
-      event: {
-        id: event.id,
-        name: event.name,
-        date: event.date,
-        location: event.location,
-        image: event.image
-      },
-      seatNumber: `SEAT-${seatNumber}`,
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
     });
   };
 
-  return (
-    <SafeAreaView 
-      style={[styles.container, { backgroundColor: colors.primary }]}
-      edges={['top', 'left', 'right']}
-    >
-      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
-      
-      <View style={{ flex: 1, backgroundColor: colors.primary }}>
+  const handleImageError = (eventId: string) => {
+    setImageLoadErrors(prev => ({
+      ...prev,
+      [eventId]: true
+    }));
+  };
+
+  const renderEventImage = (event: Event) => {
+    const imageUrl = event.image 
+      ? `http://127.0.0.1:4001${event.image}`
+      : DEFAULT_EVENT_IMAGE;
+
+    return (
+      <View style={styles.imageContainer}>
+        <ImageBackground
+          source={{ uri: imageUrl }}
+          style={styles.eventImage}
+          resizeMode="cover"
+          onError={() => handleImageError(event._id)}
+        >
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.8)']}
+            style={styles.imageOverlay}
+          >
+            <View style={styles.eventBadges}>
+              <View style={[styles.categoryBadge, { backgroundColor: colors.primary }]}>
+                <Text style={styles.badgeText}>{event.category}</Text>
+              </View>
+              <View style={[styles.statusBadge, { 
+                backgroundColor: event.status === 'upcoming' ? '#4CAF50' : 
+                               event.status === 'ongoing' ? '#2196F3' : '#9E9E9E'
+              }]}>
+                <Text style={styles.badgeText}>{event.status}</Text>
+              </View>
+            </View>
+            <View style={styles.seatsContainer}>
+              <Ionicons name="people-outline" size={16} color="white" />
+              <Text style={styles.seatsText}>
+                {event.capacity - event.attendees.length} seats left
+              </Text>
+            </View>
+          </LinearGradient>
+        </ImageBackground>
+      </View>
+    );
+  };
+
+  const formatPrice = (price: number) => {
+    return price === 0 ? 'Free' : `$${price.toFixed(2)}`;
+  };
+
+  const handleBookSeat = async (event: Event) => {
+    try {
+      setIsBooking(prev => ({ ...prev, [event._id]: true }));
+      // Add a small delay to show loading state
+      await new Promise(resolve => setTimeout(resolve, 500));
+      navigation.navigate('EventPayment', {
+        event: {
+          id: event._id,
+          name: event.title,
+          date: event.date,
+          location: event.location,
+          image: event.image
+        },
+        seatNumber: '1'
+      });
+    } finally {
+      setIsBooking(prev => ({ ...prev, [event._id]: false }));
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Header 
           islamicDate={islamicDate}
           location={location}
-          onNotificationPress={() => {
-            console.log('Notification pressed');
-          }}
+          onNotificationPress={() => {}}
         />
-
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color={'black'} style={styles.searchIcon} />
-          <TextInput
-            style={[styles.searchInput, { color: 'black' }]}
-            placeholder="Search events..."
-            placeholderTextColor={'black'}
-            value={searchQuery}
-            onChangeText={handleSearch}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity 
-              style={styles.clearButton}
-              onPress={() => {
-                setSearchQuery('');
-                setFilteredEvents(islamicEvents);
-              }}
-            >
-              <Ionicons name="close-circle" size={20} color={'black'} />
-            </TouchableOpacity>
-          )}
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.text }]}>
+            Loading events...
+          </Text>
         </View>
+      </SafeAreaView>
+    );
+  }
 
-        <ScrollView 
-          style={styles.eventsList}
-          showsVerticalScrollIndicator={false}
-        >
-          {filteredEvents.map((event) => (
-            <View key={event.id} style={[styles.eventCard, { backgroundColor: 'rgba(0, 0, 0, 0.1)' }]}>
-              <Image 
-                source={event.image} 
-                style={styles.eventImage}
-              />
-              <View style={styles.eventContent}>
-                <View style={styles.eventHeader}>
-                  <View>
-                    <Text style={[styles.eventName, { color: 'black' }]}>{event.name}</Text>
-                    <Text style={[styles.eventDate, { color: 'black' }]}>{event.date}</Text>
-                    <Text style={[styles.hijriDate, { color: 'black' }]}>{event.hijriDate}</Text>
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <Header 
+        islamicDate={islamicDate}
+        location={location}
+        onNotificationPress={() => {}}
+      />
+      <ScrollView style={styles.scrollView}>
+        {error ? (
+          <View style={styles.errorContainer}>
+            <Text style={[styles.errorText, { color: colors.text }]}>{error}</Text>
+            <TouchableOpacity 
+              style={[styles.retryButton, { backgroundColor: colors.primary }]}
+              onPress={fetchEvents}
+            >
+              <Text style={[styles.retryButtonText, { color: colors.background }]}>
+                Retry
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.eventsContainer}>
+            {events.map((event) => (
+              <View
+                key={event._id}
+                style={[styles.eventCard, { backgroundColor: colors.cardBackground }]}
+              >
+                {renderEventImage(event)}
+                <View style={styles.eventContent}>
+                  <Text style={[styles.eventTitle, { color: colors.text }]}>
+                    {event.title}
+                  </Text>
+                  <View style={styles.eventInfoRow}>
+                    <View style={styles.eventInfoItem}>
+                      <Ionicons name="calendar-outline" size={16} color={colors.textSecondary} />
+                      <Text style={[styles.eventDate, { color: colors.textSecondary }]}>
+                        {formatDate(event.date)}
+                      </Text>
+                    </View>
+                    <View style={styles.eventInfoItem}>
+                      <Ionicons name="location-outline" size={16} color={colors.textSecondary} />
+                      <Text style={[styles.eventLocation, { color: colors.textSecondary }]}>
+                        {event.location}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.daysContainer}>
-                    <Text style={[styles.daysNumber, { color: 'black' }]}>{event.daysUntil}</Text>
-                    <Text style={[styles.daysText, { color: 'black' }]}>days left</Text>
-                  </View>
-                </View>
-                <Text style={[styles.eventDescription, { color: 'black' }]}>{event.description}</Text>
-                <View style={styles.eventFooter}>
-                  <TouchableOpacity style={[styles.reminderButton, { backgroundColor: 'rgba(0, 0, 0, 0.1)' }]}>
-                    <Ionicons name="notifications-outline" size={20} color={'black'} />
-                    <Text style={[styles.reminderText, { color: 'black' }]}>Remind me</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.bookingButton, { backgroundColor: 'rgba(0, 0, 0, 0.1)' }]}
-                    onPress={() => handleBooking(event)}
+                  <Text 
+                    style={[styles.eventDescription, { color: colors.textSecondary }]}
+                    numberOfLines={2}
                   >
-                    <Ionicons name="calendar-outline" size={20} color={'black'} />
-                    <Text style={[styles.bookingText, { color: 'black' }]}>Book Seat</Text>
-                  </TouchableOpacity>
+                    {event.description}
+                  </Text>
+                  <View style={styles.eventFooter}>
+                    <View style={styles.priceContainer}>
+                      <Text style={[styles.priceLabel, { color: colors.textSecondary }]}>Price</Text>
+                      <Text style={[styles.priceText, { color: colors.primary }]}>
+                        {formatPrice(event.price)}
+                      </Text>
+                    </View>
+                    <TouchableOpacity 
+                      style={[
+                        styles.bookButton, 
+                        { 
+                          opacity: isBooking[event._id] ? 0.7 : 1
+                        }
+                      ]}
+                      onPress={() => handleBookSeat(event)}
+                      disabled={isBooking[event._id]}
+                    >
+                      <LinearGradient
+                        colors={['#4A90E2', '#357ABD']}
+                        style={styles.bookButtonGradient}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                      >
+                        {isBooking[event._id] ? (
+                          <ActivityIndicator size="small" color="white" />
+                        ) : (
+                          <View style={styles.bookButtonContent}>
+                            <Ionicons name="ticket-outline" size={16} color="white" style={styles.bookButtonIcon} />
+                            <Text style={[styles.bookButtonText, { color: 'white' }]}>
+                              Book a Seat
+                            </Text>
+                          </View>
+                        )}
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
-            </View>
-          ))}
-        </ScrollView>
-      </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
-    marginHorizontal: 20,
-    marginVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 10,
-    height: 45,
-  },
-  searchIcon: {
-    marginRight: 10,
-  },
-  searchInput: {
+  scrollView: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
     fontSize: 16,
   },
-  clearButton: {
-    padding: 5,
-  },
-  eventsList: {
+  errorContainer: {
     flex: 1,
-    paddingHorizontal: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  retryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  eventsContainer: {
+    padding: 16,
   },
   eventCard: {
-    borderRadius: 15,
-    marginBottom: 16,
+    borderRadius: 16,
+    marginBottom: 20,
     overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  imageContainer: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#f0f0f0',
   },
   eventImage: {
     width: '100%',
-    height: 200,
+    height: '100%',
+  },
+  imageOverlay: {
+    flex: 1,
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  eventBadges: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  categoryBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  badgeText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  seatsContainer: {
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+  },
+  seatsText: {
+    color: 'white',
+    marginLeft: 4,
+    fontSize: 12,
+    fontWeight: '600',
   },
   eventContent: {
     padding: 16,
   },
-  eventHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+  eventTitle: {
+    fontSize: 20,
+    fontWeight: '700',
     marginBottom: 12,
   },
-  eventName: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 4,
+  eventInfoRow: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    gap: 16,
+  },
+  eventInfoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   eventDate: {
     fontSize: 14,
-    marginBottom: 2,
   },
-  hijriDate: {
+  eventLocation: {
     fontSize: 14,
-    fontStyle: 'italic',
-  },
-  daysContainer: {
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 10,
-  },
-  daysNumber: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  daysText: {
-    fontSize: 12,
   },
   eventDescription: {
     fontSize: 14,
+    lineHeight: 20,
     marginBottom: 16,
   },
   eventFooter: {
@@ -293,28 +437,43 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  reminderButton: {
+  priceContainer: {
+    flexDirection: 'column',
+  },
+  priceLabel: {
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  priceText: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  bookButton: {
+    borderRadius: 12,
+    minWidth: 140,
+    overflow: 'hidden',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  bookButtonGradient: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bookButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 8,
-    borderRadius: 8,
+    justifyContent: 'center',
   },
-  reminderText: {
-    marginLeft: 6,
+  bookButtonIcon: {
+    marginRight: 8,
+  },
+  bookButtonText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
   },
-  bookingButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 8,
-  },
-  bookingText: {
-    marginLeft: 6,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-});
-
-export default IslamicEventsScreen; 
+}); 

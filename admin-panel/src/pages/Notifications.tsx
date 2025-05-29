@@ -28,6 +28,7 @@ import {
   Divider,
   CircularProgress,
   Alert,
+  Avatar,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
@@ -37,6 +38,7 @@ import {
   AccessTime as AccessTimeIcon,
   Send as SendIcon,
   Settings as SettingsIcon,
+  Image as ImageIcon,
 } from '@mui/icons-material';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider, DateTimePicker } from '@mui/x-date-pickers';
@@ -61,7 +63,9 @@ const Notifications: React.FC = () => {
     type: 'info',
     targetAudience: 'all',
     sentAt: new Date(),
+    imageUrl: '',
   });
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   useEffect(() => {
     loadNotifications();
@@ -91,6 +95,18 @@ const Notifications: React.FC = () => {
     }
   };
 
+  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+        setFormData({ ...formData, imageUrl: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleOpenSendDialog = () => {
     setFormData({
       title: '',
@@ -98,7 +114,9 @@ const Notifications: React.FC = () => {
       type: 'info',
       targetAudience: 'all',
       sentAt: new Date(),
+      imageUrl: '',
     });
+    setImagePreview(null);
     setOpenSendDialog(true);
   };
 
@@ -240,6 +258,7 @@ const Notifications: React.FC = () => {
               <Table stickyHeader>
                 <TableHead>
                   <TableRow>
+                    <TableCell>Image</TableCell>
                     <TableCell>Title</TableCell>
                     <TableCell>Message Preview</TableCell>
                     <TableCell>Type</TableCell>
@@ -255,6 +274,29 @@ const Notifications: React.FC = () => {
                       hover
                       sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
                     >
+                      <TableCell>
+                        {notification.imageUrl ? (
+                          <Avatar
+                            src={notification.imageUrl}
+                            variant="rounded"
+                            sx={{ width: 60, height: 60 }}
+                          />
+                        ) : (
+                          <Box
+                            sx={{
+                              width: 60,
+                              height: 60,
+                              bgcolor: 'grey.100',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderRadius: 1,
+                            }}
+                          >
+                            <ImageIcon sx={{ color: 'grey.400' }} />
+                          </Box>
+                        )}
+                      </TableCell>
                       <TableCell>{notification.title}</TableCell>
                       <TableCell>
                         <Typography variant="body2" noWrap sx={{ maxWidth: 300 }}>
@@ -344,6 +386,36 @@ const Notifications: React.FC = () => {
                 onChange={(newValue: Date | null) => setFormData({ ...formData, sentAt: newValue || new Date() })}
               />
             </LocalizationProvider>
+            
+            {/* Image Upload Section */}
+            <Box sx={{ mt: 2 }}>
+              <input
+                accept="image/*"
+                style={{ display: 'none' }}
+                id="image-upload"
+                type="file"
+                onChange={handleImageChange}
+              />
+              <label htmlFor="image-upload">
+                <Button
+                  variant="outlined"
+                  component="span"
+                  startIcon={<ImageIcon />}
+                  fullWidth
+                >
+                  {imagePreview ? 'Change Image' : 'Add Image'}
+                </Button>
+              </label>
+              {imagePreview && (
+                <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
+                  <Avatar
+                    src={imagePreview}
+                    variant="rounded"
+                    sx={{ width: 200, height: 200 }}
+                  />
+                </Box>
+              )}
+            </Box>
           </Box>
         </DialogContent>
         <DialogActions>
@@ -363,6 +435,15 @@ const Notifications: React.FC = () => {
         <DialogContent>
           <Card sx={{ mt: 2 }}>
             <CardContent>
+              {formData.imageUrl && (
+                <Box sx={{ mb: 2, display: 'flex', justifyContent: 'center' }}>
+                  <Avatar
+                    src={formData.imageUrl}
+                    variant="rounded"
+                    sx={{ width: '100%', height: 200 }}
+                  />
+                </Box>
+              )}
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                 {getTypeIcon(formData.type || 'info')}
                 <Typography variant="h6">{formData.title}</Typography>
