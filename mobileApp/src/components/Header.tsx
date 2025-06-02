@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 
@@ -8,6 +8,8 @@ interface HeaderProps {
   location: string;
   onNotificationPress: () => void;
   showBackButton?: boolean;
+  isLoadingLocation?: boolean;
+  onLocationPress?: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -15,12 +17,24 @@ const Header: React.FC<HeaderProps> = ({
   location,
   onNotificationPress,
   showBackButton = false,
+  isLoadingLocation = false,
+  onLocationPress,
 }) => {
   const navigation = useNavigation();
 
+  const isLocationLoading = location === 'Loading location...' || isLoadingLocation;
+  const isLocationError = location === 'Please enable location services' || 
+                         location === 'Location permission denied' || 
+                         location === 'Location unavailable';
+
   return (
     <View style={styles.header}>
-      <View style={styles.headerTopRow}>
+      <StatusBar 
+        barStyle="dark-content"
+        translucent={true}
+        backgroundColor="transparent"
+      />
+      <View style={styles.headerContent}>
         {showBackButton ? (
           <TouchableOpacity 
             style={styles.backButton}
@@ -29,9 +43,30 @@ const Header: React.FC<HeaderProps> = ({
             <Ionicons name="arrow-back" size={28} color="black" />
           </TouchableOpacity>
         ) : (
-          <View>
+          <View style={styles.dateLocationContainer}>
             <Text style={styles.islamicDate}>{islamicDate}</Text>
-            <Text style={styles.location}>{location}</Text>
+            {isLocationLoading ? (
+              <View style={styles.locationLoading}>
+                <ActivityIndicator size="small" color="#666" />
+                <Text style={styles.locationText}>Loading location...</Text>
+              </View>
+            ) : (
+              <TouchableOpacity 
+                onPress={isLocationError ? onLocationPress : undefined}
+                style={isLocationError ? styles.locationError : undefined}
+              >
+                <Text 
+                  style={[
+                    styles.location, 
+                    isLocationError && styles.locationErrorText
+                  ]} 
+                  numberOfLines={1} 
+                  ellipsizeMode="tail"
+                >
+                  {location || 'Location not available'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
         <TouchableOpacity
@@ -47,25 +82,71 @@ const Header: React.FC<HeaderProps> = ({
 
 const styles = StyleSheet.create({
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 10,
+    ...Platform.select({
+      ios: {
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 0,
+      },
+    }),
   },
-  headerTopRow: {
+  headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    bottom: 45,
+    height: 44,
+    paddingHorizontal: 20,
+    paddingVertical: 5,
+    marginTop: Platform.OS === 'android' ? -10 : -40,
+  },
+  dateLocationContainer: {
+    flex: 1,
+    marginRight: 10,
+    justifyContent: 'center',
   },
   islamicDate: {
     fontSize: 16,
     fontWeight: '600',
     color: 'black',
+    ...Platform.select({
+      android: {
+        fontFamily: 'sans-serif-medium',
+      },
+    }),
   },
   location: {
     fontSize: 14,
-    color: 'black',
+    color: '#666',
     marginTop: 4,
+    ...Platform.select({
+      android: {
+        fontFamily: 'sans-serif',
+        marginTop: 2,
+      },
+    }),
+  },
+  locationLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    ...Platform.select({
+      android: {
+        marginTop: 2,
+      },
+    }),
+  },
+  locationText: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 8,
+    ...Platform.select({
+      android: {
+        fontFamily: 'sans-serif',
+      },
+    }),
   },
   notificationButton: {
     width: 44,
@@ -82,6 +163,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  locationError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  locationErrorText: {
+    color: '#FF3B30',
+    textDecorationLine: 'underline',
   },
 });
 

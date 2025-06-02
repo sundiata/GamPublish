@@ -34,11 +34,18 @@ type RootStackParamList = {
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-// API URL based on platform
+// Base URL for API calls
 const API_URL = Platform.select({
   ios: 'http://127.0.0.1:4001/api',
   android: 'http://10.0.2.2:4001/api',
   default: 'http://127.0.0.1:4001/api'
+});
+
+// Base URL for static files (images)
+const STATIC_URL = Platform.select({
+  ios: 'http://127.0.0.1:4001',
+  android: 'http://10.0.2.2:4001',
+  default: 'http://127.0.0.1:4001'
 });
 
 // Default image for events
@@ -127,9 +134,15 @@ export default function IslamicEventsScreen() {
   };
 
   const renderEventImage = (event: Event) => {
-    const imageUrl = event.image 
-      ? `http://127.0.0.1:4001${event.image}`
-      : DEFAULT_EVENT_IMAGE;
+    let imageUrl = DEFAULT_EVENT_IMAGE;
+    
+    if (event.image) {
+      // Remove any leading slashes from the image path
+      const cleanImagePath = event.image.startsWith('/') ? event.image.substring(1) : event.image;
+      imageUrl = `${STATIC_URL}/${cleanImagePath}`;
+    }
+
+    console.log('Loading image from URL:', imageUrl); // Debug log
 
     return (
       <View style={styles.imageContainer}>
@@ -137,7 +150,10 @@ export default function IslamicEventsScreen() {
           source={{ uri: imageUrl }}
           style={styles.eventImage}
           resizeMode="cover"
-          onError={() => handleImageError(event._id)}
+          onError={(error) => {
+            console.error('Image loading error:', error.nativeEvent.error);
+            handleImageError(event._id);
+          }}
         >
           <LinearGradient
             colors={['transparent', 'rgba(0,0,0,0.8)']}

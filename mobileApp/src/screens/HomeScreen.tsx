@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
   Platform,
   Dimensions,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons, Feather, MaterialIcons } from "@expo/vector-icons";
@@ -35,6 +36,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 const DEFAULT_LATITUDE = 13.4549;
 const DEFAULT_LONGITUDE = -16.579;
+const DEFAULT_LOCATION = "Banjul, Gambia";
 
 // API URL based on platform
 const API_URL = Platform.select({
@@ -114,6 +116,7 @@ export default function HomeScreen({ navigation }) {
   const [progress, setProgress] = useState(0);
   const [islamicDate, setIslamicDate] = useState("");
   const [location, setLocation] = useState("Loading location...");
+  const [isLoadingLocation, setIsLoadingLocation] = useState(true);
   const [coordinates, setCoordinates] = useState({
     latitude: DEFAULT_LATITUDE,
     longitude: DEFAULT_LONGITUDE,
@@ -164,30 +167,98 @@ export default function HomeScreen({ navigation }) {
         // Get user location
         let userLocation = null;
         try {
+          setIsLoadingLocation(true);
+          
+          // First check if location services are enabled
+          const locationEnabled = await Location.hasServicesEnabledAsync();
+          console.log('Location services enabled:', locationEnabled);
+          
+          if (!locationEnabled) {
+            // Use default location if services are disabled
+            setLocation(DEFAULT_LOCATION);
+            setCoordinates({
+              latitude: DEFAULT_LATITUDE,
+              longitude: DEFAULT_LONGITUDE
+            });
+            setIsLoadingLocation(false);
+            return;
+          }
+
+          // Request permissions
           const { status } = await Location.requestForegroundPermissionsAsync();
-          if (status === "granted") {
-            const position = await Location.getCurrentPositionAsync({});
+          console.log('Location permission status:', status);
+          
+          if (status !== "granted") {
+            // Use default location if permission denied
+            setLocation(DEFAULT_LOCATION);
+            setCoordinates({
+              latitude: DEFAULT_LATITUDE,
+              longitude: DEFAULT_LONGITUDE
+            });
+            setIsLoadingLocation(false);
+            return;
+          }
+
+          try {
+            // Get current position with balanced accuracy
+            const position = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+              timeInterval: 5000,
+            });
+
+            console.log('Position received:', position);
+
             userLocation = {
               latitude: position.coords.latitude,
               longitude: position.coords.longitude,
             };
+
+            // Get address from coordinates
             const geocode = await Location.reverseGeocodeAsync({
               latitude: userLocation.latitude,
               longitude: userLocation.longitude,
             });
 
+            console.log('Geocode results:', geocode);
+
             if (geocode && geocode[0]) {
-              const { city, country } = geocode[0];
-              const locationName = `${city || "Unknown"}, ${country || "Unknown"}`;
+              const { city, region, country } = geocode[0];
+              const locationParts = [];
+              if (city) locationParts.push(city);
+              if (region) locationParts.push(region);
+              if (country) locationParts.push(country);
+              
+              const locationName = locationParts.length > 0 
+                ? locationParts.join(', ')
+                : DEFAULT_LOCATION;
+                
               setLocation(locationName);
+              console.log('Location set to:', locationName);
+            } else {
+              console.log('No geocode results found, using default location');
+              setLocation(DEFAULT_LOCATION);
             }
 
             setCoordinates(userLocation);
-          } else {
-            console.log("Location permission denied, using default location");
+          } catch (positionError) {
+            console.error("Error getting position:", positionError);
+            // Use default location on error
+            setLocation(DEFAULT_LOCATION);
+            setCoordinates({
+              latitude: DEFAULT_LATITUDE,
+              longitude: DEFAULT_LONGITUDE
+            });
           }
         } catch (locationError) {
-          console.error("Error getting location:", locationError);
+          console.error("Error in location handling:", locationError);
+          // Use default location on error
+          setLocation(DEFAULT_LOCATION);
+          setCoordinates({
+            latitude: DEFAULT_LATITUDE,
+            longitude: DEFAULT_LONGITUDE
+          });
+        } finally {
+          setIsLoadingLocation(false);
         }
 
         // Get Islamic Date
@@ -309,112 +380,147 @@ export default function HomeScreen({ navigation }) {
 
   // Update current time
   const updateCurrentTime = () => {
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    setCurrentTime(
-      `${hours.toString().padStart(2, "0")}:${minutes
-        .toString()
-        .padStart(2, "0")}`
-    );
+    try {
+      const now = new Date();
+      const hours = now.getHours();
+      const minutes = now.getMinutes();
+      setCurrentTime(
+        `${hours.toString().padStart(2, "0")}:${minutes
+          .toString()
+          .padStart(2, "0")}`
+      );
+    } catch (error) {
+      console.error('Error updating time:', error);
+      setCurrentTime('--:--');
+    }
   };
 
   // Update prayer times and statuses
   const updatePrayerTimesAndStatuses = (times: PrayerTimes) => {
-    if (!times) return;
+    if (!times) {
+      setNextPrayer(null);
+      setCountdown('--:--:--');
+      return;
+    }
 
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
-    const currentTimeInMinutes = currentHour * 60 + currentMinute;
+    try {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      const currentTimeInMinutes = currentHour * 60 + currentMinute;
 
-    const prayerTimesArray = [
-      { name: 'Fajr', time: times.fajr },
-      { name: 'Sunrise', time: times.sunrise },
-      { name: 'Dhuhr', time: times.dhuhr },
-      { name: 'Asr', time: times.asr },
-      { name: 'Maghrib', time: times.maghrib },
-      { name: 'Isha', time: times.isha }
-    ];
+      const prayerTimesArray = [
+        { name: 'Fajr', time: times.fajr },
+        { name: 'Sunrise', time: times.sunrise },
+        { name: 'Dhuhr', time: times.dhuhr },
+        { name: 'Asr', time: times.asr },
+        { name: 'Maghrib', time: times.maghrib },
+        { name: 'Isha', time: times.isha }
+      ].filter(prayer => prayer.time); // Only include prayers with valid times
 
-    // Find the next prayer
-    let nextPrayerIndex = -1;
-    let statuses = {};
-
-    for (let i = 0; i < prayerTimesArray.length; i++) {
-      const prayer = prayerTimesArray[i];
-      const [hours, minutes] = prayer.time.split(':').map(Number);
-      const prayerTimeInMinutes = hours * 60 + minutes;
-
-      // Set status for each prayer
-      if (currentTimeInMinutes > prayerTimeInMinutes) {
-        statuses[prayer.name.toLowerCase()] = 'completed';
-      } else if (nextPrayerIndex === -1) {
-        nextPrayerIndex = i;
-        statuses[prayer.name.toLowerCase()] = 'next';
-      } else {
-        statuses[prayer.name.toLowerCase()] = 'pending';
+      if (prayerTimesArray.length === 0) {
+        setNextPrayer(null);
+        setCountdown('--:--:--');
+        return;
       }
-    }
 
-    // If all prayers are completed, next prayer is tomorrow's Fajr
-    if (nextPrayerIndex === -1) {
-      nextPrayerIndex = 0;
-      const nextPrayer = prayerTimesArray[0];
-      const [hours, minutes] = nextPrayer.time.split(':').map(Number);
-      setNextPrayer({
-        name: nextPrayer.name,
-        hour: hours,
-        minute: minutes,
-        tomorrow: true
-      });
-    } else {
-      const nextPrayer = prayerTimesArray[nextPrayerIndex];
-      const [hours, minutes] = nextPrayer.time.split(':').map(Number);
-      setNextPrayer({
-        name: nextPrayer.name,
-        hour: hours,
-        minute: minutes
-      });
-    }
+      // Find the next prayer
+      let nextPrayerIndex = -1;
+      let statuses = {};
 
-    setPrayerStatuses(statuses);
+      for (let i = 0; i < prayerTimesArray.length; i++) {
+        const prayer = prayerTimesArray[i];
+        const [hours, minutes] = prayer.time.split(':').map(Number);
+        
+        if (isNaN(hours) || isNaN(minutes)) {
+          console.error('Invalid prayer time format:', prayer.time);
+          continue;
+        }
+
+        const prayerTimeInMinutes = hours * 60 + minutes;
+
+        // Set status for each prayer
+        if (currentTimeInMinutes > prayerTimeInMinutes) {
+          statuses[prayer.name.toLowerCase()] = 'completed';
+        } else if (nextPrayerIndex === -1) {
+          nextPrayerIndex = i;
+          statuses[prayer.name.toLowerCase()] = 'next';
+        } else {
+          statuses[prayer.name.toLowerCase()] = 'pending';
+        }
+      }
+
+      // If all prayers are completed, next prayer is tomorrow's Fajr
+      if (nextPrayerIndex === -1) {
+        nextPrayerIndex = 0;
+        const nextPrayer = prayerTimesArray[0];
+        const [hours, minutes] = nextPrayer.time.split(':').map(Number);
+        setNextPrayer({
+          name: nextPrayer.name,
+          hour: hours,
+          minute: minutes,
+          tomorrow: true
+        });
+      } else {
+        const nextPrayer = prayerTimesArray[nextPrayerIndex];
+        const [hours, minutes] = nextPrayer.time.split(':').map(Number);
+        setNextPrayer({
+          name: nextPrayer.name,
+          hour: hours,
+          minute: minutes
+        });
+      }
+
+      setPrayerStatuses(statuses);
+    } catch (error) {
+      console.error('Error updating prayer times:', error);
+      setNextPrayer(null);
+      setCountdown('--:--:--');
+    }
   };
 
   // Update countdown
   const updateCountdown = () => {
-    if (!nextPrayer) return;
-
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
-    const currentSecond = now.getSeconds();
-    const currentTimeInSeconds = currentHour * 3600 + currentMinute * 60 + currentSecond;
-
-    let targetTimeInSeconds = nextPrayer.hour * 3600 + nextPrayer.minute * 60;
-    if (nextPrayer.tomorrow) {
-      targetTimeInSeconds += 24 * 3600; // Add 24 hours if it's tomorrow
+    if (!nextPrayer) {
+      setCountdown('--:--:--');
+      return;
     }
 
-    let remainingSeconds = targetTimeInSeconds - currentTimeInSeconds;
-    if (remainingSeconds < 0) {
-      remainingSeconds += 24 * 3600; // Add 24 hours if negative
+    try {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      const currentSecond = now.getSeconds();
+      const currentTimeInSeconds = currentHour * 3600 + currentMinute * 60 + currentSecond;
+
+      let targetTimeInSeconds = nextPrayer.hour * 3600 + nextPrayer.minute * 60;
+      if (nextPrayer.tomorrow) {
+        targetTimeInSeconds += 24 * 3600; // Add 24 hours if it's tomorrow
+      }
+
+      let remainingSeconds = targetTimeInSeconds - currentTimeInSeconds;
+      if (remainingSeconds < 0) {
+        remainingSeconds += 24 * 3600; // Add 24 hours if negative
+      }
+
+      const hours = Math.floor(remainingSeconds / 3600);
+      const minutes = Math.floor((remainingSeconds % 3600) / 60);
+      const seconds = remainingSeconds % 60;
+
+      setCountdown(
+        `${hours.toString().padStart(2, '0')}:${minutes
+          .toString()
+          .padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+      );
+
+      // Update progress
+      const totalSecondsInDay = 24 * 3600;
+      const progress = (currentTimeInSeconds / totalSecondsInDay) * 100;
+      setProgress(progress);
+    } catch (error) {
+      console.error('Error updating countdown:', error);
+      setCountdown('--:--:--');
     }
-
-    const hours = Math.floor(remainingSeconds / 3600);
-    const minutes = Math.floor((remainingSeconds % 3600) / 60);
-    const seconds = remainingSeconds % 60;
-
-    setCountdown(
-      `${hours.toString().padStart(2, '0')}:${minutes
-        .toString()
-        .padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-    );
-
-    // Update progress
-    const totalSecondsInDay = 24 * 3600;
-    const progress = (currentTimeInSeconds / totalSecondsInDay) * 100;
-    setProgress(progress);
   };
 
   // Navigate to prayer times page
@@ -563,6 +669,24 @@ export default function HomeScreen({ navigation }) {
     };
   }, [prayerTimes]);
 
+  const openLocationSettings = async () => {
+    try {
+      if (Platform.OS === 'android') {
+        await Linking.openSettings();
+      } else {
+        await Linking.openURL('app-settings:');
+      }
+    } catch (error) {
+      console.error('Error opening settings:', error);
+    }
+  };
+
+  const handleLocationPress = () => {
+    if (location === 'Please enable location services' || location === 'Location services are disabled') {
+      openLocationSettings();
+    }
+  };
+
   if (isLoading) {
     return (
       <SafeAreaView
@@ -589,9 +713,10 @@ export default function HomeScreen({ navigation }) {
           islamicDate={islamicDate}
           location={location}
           onNotificationPress={() => {
-            // Handle notification press
             console.log('Notification pressed');
           }}
+          isLoadingLocation={isLoadingLocation}
+          onLocationPress={handleLocationPress}
         />
 
         <ScrollView

@@ -45,6 +45,20 @@ const AnimatedGradient = Animated.createAnimatedComponent(LinearGradient);
 // Add a purple accent color for the play button
 const PURPLE = '#A259FF';
 
+// Base URL for API calls
+const API_URL = Platform.select({
+  ios: 'http://127.0.0.1:4001/api',
+  android: 'http://10.0.2.2:4001/api',
+  default: 'http://127.0.0.1:4001/api'
+});
+
+// Base URL for static files (images and audio)
+const STATIC_URL = Platform.select({
+  ios: 'http://127.0.0.1:4001',
+  android: 'http://10.0.2.2:4001',
+  default: 'http://127.0.0.1:4001'
+});
+
 const AudioScreen = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState<'tracks' | 'albums'>('tracks');
   const [currentTrack, setCurrentTrack] = useState<RecitationItem | null>(null);
@@ -67,6 +81,9 @@ const AudioScreen = ({ navigation }) => {
   const [duration, setDuration] = useState(0);
   const progressUpdateInterval = useRef(null);
   const progressBarRef = useRef<View>(null);
+
+  // Add timeout constant
+  const LOAD_TIMEOUT = 10000; // 10 seconds timeout
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -96,6 +113,7 @@ const AudioScreen = ({ navigation }) => {
           interruptionModeIOS: 1, // DoNotMix
           interruptionModeAndroid: 1, // DoNotMix
         });
+        console.log('Audio mode set successfully');
       } catch (error) {
         console.error('Error setting up audio:', error);
         setError('Failed to initialize audio. Please restart the app.');
@@ -142,13 +160,24 @@ const AudioScreen = ({ navigation }) => {
       setIsBuffering(true);
       setPlaybackError(null);
 
-      // Log the audio URL we're trying to play
-      console.log('Attempting to play audio from URL:', item.fileUrl);
-
-      // Validate the URL
+      // Validate and prepare the audio URL
       if (!item.fileUrl) {
         throw new Error('No audio URL provided');
       }
+
+      // Ensure the URL is properly formatted for the platform
+      let audioUrl = item.fileUrl;
+      if (Platform.OS === 'android') {
+        audioUrl = item.fileUrl.startsWith('http') 
+          ? item.fileUrl.replace('127.0.0.1', '10.0.2.2')
+          : `${STATIC_URL}${item.fileUrl}`.replace('127.0.0.1', '10.0.2.2');
+      } else {
+        audioUrl = item.fileUrl.startsWith('http') 
+          ? item.fileUrl
+          : `${STATIC_URL}${item.fileUrl}`;
+      }
+      
+      console.log('Prepared audio URL:', audioUrl);
 
       // Unload any existing sound
       if (sound) {
@@ -165,18 +194,26 @@ const AudioScreen = ({ navigation }) => {
         try {
           console.log(`Loading sound attempt ${retryAttempt + 1}...`);
           
+          // Create sound object with proper configuration
           const { sound: newSound, status } = await Audio.Sound.createAsync(
-            { uri: item.fileUrl },
             { 
-              shouldPlay: true,
+              uri: audioUrl,
+              headers: {
+                'Accept': 'audio/mpeg,audio/*;q=0.9,*/*;q=0.8',
+                'Cache-Control': 'no-cache',
+              },
+            },
+            { 
+              shouldPlay: false,
               progressUpdateIntervalMillis: 1000,
               positionMillis: 0,
               volume: 1.0,
               rate: 1.0,
               shouldCorrectPitch: true,
+              androidImplementation: 'MediaPlayer',
             },
             (status) => {
-              console.log('Playback status update:', status);
+              console.log('Playback status update:', JSON.stringify(status, null, 2));
               if (status.isLoaded) {
                 setIsBuffering(status.isBuffering);
                 setIsPlaying(status.isPlaying);
@@ -185,7 +222,7 @@ const AudioScreen = ({ navigation }) => {
                   setIsPlaying(false);
                 }
               } else {
-                console.log('Audio not loaded in status update:', status);
+                console.log('Audio not loaded in status update:', JSON.stringify(status, null, 2));
                 if (!status.isLoaded && 'error' in status) {
                   console.error('Playback error:', status.error);
                   setPlaybackError(status.error);
@@ -194,12 +231,15 @@ const AudioScreen = ({ navigation }) => {
             }
           );
 
+          // Log the initial status
+          console.log('Initial sound status:', JSON.stringify(status, null, 2));
+
           if (!status.isLoaded) {
-            throw new Error('Failed to load audio');
+            throw new Error(`Failed to load audio: ${JSON.stringify(status)}`);
           }
 
+          // Set the sound first
           setSound(newSound);
-          setIsPlaying(true);
           setCurrentTrack({
             ...item,
             duration: getDurationFormatted(status.durationMillis || 0)
@@ -207,14 +247,23 @@ const AudioScreen = ({ navigation }) => {
           setIsModalVisible(true);
           setRetryCount(0);
 
+          // Then try to play it
+          try {
+            await newSound.playAsync();
+            setIsPlaying(true);
+          } catch (playError) {
+            console.error('Error playing sound:', playError);
+            throw new Error(`Failed to play audio: ${playError.message}`);
+          }
+
         } catch (error) {
           console.error(`Error loading sound (attempt ${retryAttempt + 1}):`, error);
           if (retryAttempt < MAX_RETRIES) {
-            // Wait before retrying
+            console.log(`Retrying in 1 second... (attempt ${retryAttempt + 1}/${MAX_RETRIES})`);
             await new Promise(resolve => setTimeout(resolve, 1000));
             return loadSound(retryAttempt + 1);
           } else {
-            throw new Error('Failed to load audio after multiple attempts');
+            throw new Error(`Failed to load audio after ${MAX_RETRIES} attempts: ${error.message}`);
           }
         }
       };
@@ -223,7 +272,7 @@ const AudioScreen = ({ navigation }) => {
 
     } catch (error) {
       console.error('Error playing audio:', error);
-      setPlaybackError('Failed to play audio. Please try again.');
+      setPlaybackError(`Failed to play audio: ${error.message}`);
       setIsPlaying(false);
       setCurrentTrack(null);
       
@@ -349,10 +398,9 @@ const AudioScreen = ({ navigation }) => {
       if (response.status === 'success' && response.data.tracks) {
         // Process tracks to ensure proper URLs
         const processedTracks = response.data.tracks.map(track => {
-          // Construct full URLs by prepending the base URL
-          const baseUrl = 'http://localhost:4001'; // or your actual base URL
-          const audioUrl = `${baseUrl}${track.audioFile}`;
-          const coverUrl = `${baseUrl}${track.coverImage}`;
+          // Construct full URLs by prepending the static URL
+          const audioUrl = `${STATIC_URL}${track.audioFile}`;
+          const coverUrl = `${STATIC_URL}${track.coverImage}`;
           
           console.log('Processing track:', {
             id: track._id,
@@ -396,8 +444,7 @@ const AudioScreen = ({ navigation }) => {
       if (response.status === 'success' && response.data.albums) {
         // Process albums to ensure proper URLs
         const processedAlbums = response.data.albums.map(album => {
-          const baseUrl = 'http://localhost:4001'; // or your actual base URL
-          const albumCoverUrl = `${baseUrl}${album.coverImage}`;
+          const albumCoverUrl = `${STATIC_URL}${album.coverImage}`;
           
           console.log('Processing album:', {
             id: album._id,
@@ -409,8 +456,8 @@ const AudioScreen = ({ navigation }) => {
             ...album,
             coverImage: albumCoverUrl,
             tracks: album.tracks.map(track => {
-              const trackAudioUrl = `${baseUrl}${track.audioFile}`;
-              const trackCoverUrl = `${baseUrl}${track.coverImage}`;
+              const trackAudioUrl = `${STATIC_URL}${track.audioFile}`;
+              const trackCoverUrl = `${STATIC_URL}${track.coverImage}`;
               
               console.log('Processing album track:', {
                 id: track._id,

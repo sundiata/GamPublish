@@ -380,13 +380,13 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
-    paddingTop: 8,
+    paddingTop: Platform.OS === 'android' ? 60 : 80,
     backgroundColor: 'white',
   },
   nextPrayerCard: {
     width: '90%',
     margin: 12,
-    marginTop: 4,
+    marginTop: Platform.OS === 'android' ? 4 : 20,
     marginHorizontal: 16,
     borderRadius: 24,
     overflow: 'hidden',
